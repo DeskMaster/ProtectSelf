@@ -74,6 +74,8 @@ NTSTATUS InitialCallBack();
 
 NTSTATUS UnInitialCallBack();
 
+NTSTATUS GlobalInitial();
+
 OB_PREOP_CALLBACK_STATUS
 ProcessObjectPreCallback(
 	__in PVOID  RegistrationContext,
@@ -92,6 +94,18 @@ VOID LoadImageNotify(
 	__in HANDLE ProcessId,                // pid into which image is being mapped
 	__in PIMAGE_INFO ImageInfo
 );
+
+UNICODE_STRING*  
+AllocateAndGetFileName(
+	__in PFLT_CALLBACK_DATA Data,
+	__in NTSTATUS* pStatus);
+
+BOOLEAN 
+PreCreateProcess(PFLT_IO_PARAMETER_BLOCK pIopb);
+
+BOOLEAN
+PreSetInforProcess(PFLT_IO_PARAMETER_BLOCK pIopb);
+
 //---------------------------------------------------------------------------
 //  Assign text sections for each routine.
 //---------------------------------------------------------------------------
@@ -638,237 +652,36 @@ Return Value:
 
 --*/
 {
+	NTSTATUS status;
+	BOOLEAN  bForbid = FALSE;
+	PFLT_IO_PARAMETER_BLOCK pIopb = Data->Iopb;
 
-    FLT_PREOP_CALLBACK_STATUS returnStatus = FLT_PREOP_SUCCESS_NO_CALLBACK; //assume we are NOT going to call our completion routine
-    PRECORD_LIST recordList;
-    PFLT_FILE_NAME_INFORMATION nameInfo = NULL;
-    UNICODE_STRING defaultName;
-    PUNICODE_STRING nameToUse;
-    NTSTATUS status;
-    WCHAR name[MAX_NAME_SPACE/sizeof(WCHAR)];
+	UNREFERENCED_PARAMETER( CompletionContext );
 
-    //
-    //  Try and get a log record
-    //
-
-    recordList = SpyNewRecord();
-
-    if (recordList) 
+	if (Data->RequestorMode == KernelMode || FltObjects->FileObject)
 	{
+		return FLT_PREOP_SUCCESS_WITH_CALLBACK;
+	}
 
-        //
-        //  We got a log record, if there is a file object, get its name.
-        //
-        //  NOTE: By default, we use the query method
-        //  FLT_FILE_NAME_QUERY_ALWAYS_ALLOW_CACHE_LOOKUP
-        //  because MiniSpy would like to get the name as much as possible, but
-        //  can cope if we can't retrieve a name.  For a debugging type filter,
-        //  like Minispy, this is reasonable, but for most production filters
-        //  who need names reliably, they should query the name at times when it
-        //  is known to be safe and use the query method
-        //  FLT_FILE_NAME_QUERY_DEFAULT.
-        //
+	if (pIopb->MajorFunction == IRP_MJ_CREATE)
+	{
+		bForbid = PreCreateProcess(pIopb);
+	}
+	else if(pIopb->MajorFunction == IRP_MJ_SET_INFORMATION)
+	{
+		bForbid = PreSetInforProcess(pIopb);
+	}
 
-        if (FltObjects->FileObject != NULL) 
-		{
+	if(bForbid)
+	{
+		Data->IoStatus.Information = 0;
+		Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+		return FLT_PREOP_COMPLETE;
 
-            status = FltGetFileNameInformation( Data,
-                                                FLT_FILE_NAME_NORMALIZED |
-                                                    MiniSpyData.NameQueryMethod,
-                                                &nameInfo );
+	}
 
-        } 
-		else 
-		{
+	return FLT_PREOP_SUCCESS_WITH_CALLBACK;
 
-            //
-            //  Can't get a name when there's no file object
-            //
-
-            status = STATUS_UNSUCCESSFUL;
-        }
-
-        //
-        //  Use the name if we got it else use a default name
-        //
-
-        if (NT_SUCCESS( status )) 
-		{
-
-            nameToUse = &nameInfo->Name;
-
-            //
-            //  Parse the name if requested
-            //
-
-            if (FlagOn( MiniSpyData.DebugFlags, SPY_DEBUG_PARSE_NAMES )) 
-			{
-
-#ifdef DBG
-                ASSERT( NT_SUCCESS( FltParseFileNameInformation( nameInfo ) ) );
-#else
-                FltParseFileNameInformation( nameInfo );
-#endif
-            }
-
-        } 
-		else 
-		{
-            NTSTATUS lstatus;
-            PFLT_FILE_NAME_INFORMATION lnameInfo;
-
-            //
-            //  If we couldn't get the "normalized" name try and get the
-            //  "opened" name
-            //
-
-            if (FltObjects->FileObject != NULL) 
-			{
-
-                //
-                //  Get the opened name
-                //
-
-                lstatus = FltGetFileNameInformation( Data,
-                                                     FLT_FILE_NAME_OPENED |
-                                                            FLT_FILE_NAME_QUERY_ALWAYS_ALLOW_CACHE_LOOKUP,
-                                                     &lnameInfo );
-
-
-                if (NT_SUCCESS(lstatus)) 
-				{
-
-#pragma prefast(suppress:__WARNING_BANNED_API_USAGE, "reviewed and safe usage")
-                    (VOID)_snwprintf( name,
-                                      sizeof(name)/sizeof(WCHAR),
-                                      L"<%08x> %wZ",
-                                      status,
-                                      &lnameInfo->Name );
-
-                    FltReleaseFileNameInformation( lnameInfo );
-
-                }
-				else 
-				{
-
-                    //
-                    //  If that failed report both NORMALIZED status and
-                    //  OPENED status
-                    //
-
-#pragma prefast(suppress:__WARNING_BANNED_API_USAGE, "reviewed and safe usage")
-                    (VOID)_snwprintf( name,
-                                      sizeof(name)/sizeof(WCHAR),
-                                      L"<NO NAME: NormalizeStatus=%08x OpenedStatus=%08x>",
-                                      status,
-                                      lstatus );
-                }
-
-            } 
-			else 
-			{
-
-#pragma prefast(suppress:__WARNING_BANNED_API_USAGE, "reviewed and safe usage")
-                (VOID)_snwprintf( name,
-                                  sizeof(name)/sizeof(WCHAR),
-                                  L"<NO NAME>" );
-
-            }
-
-            //
-            //  Name was initialized by _snwprintf() so it may not be null terminated
-            //  if the buffer is insufficient. We will ignore this error and truncate
-            //  the file name. 
-            //
-
-            name[(sizeof(name)/sizeof(WCHAR))-1] = L'\0';
-
-            RtlInitUnicodeString( &defaultName, name );
-            nameToUse = &defaultName;
-
-#if DBG
-            //
-            //  Debug support to break on certain errors.
-            //
-
-            if (FltObjects->FileObject != NULL) {
-                NTSTATUS retryStatus;
-
-                if ((StatusToBreakOn != 0) && (status == StatusToBreakOn)) {
-
-                    DbgBreakPoint();
-                }
-
-                retryStatus = FltGetFileNameInformation( Data,
-                                                         FLT_FILE_NAME_NORMALIZED |
-                                                             MiniSpyData.NameQueryMethod,
-                                                         &nameInfo );
-
-                if (!NT_SUCCESS( retryStatus )) {
-
-                    //
-                    //  We always release nameInfo, so ignore return value.
-                    //
-
-                    NOTHING;
-                }
-            }
-#endif
-
-        }
-
-        //
-        //  Store the name
-        //
-
-        SpySetRecordName( &(recordList->LogRecord), nameToUse );
-
-        //
-        //  Release the name information structure (if defined)
-        //
-
-        if (NULL != nameInfo) 
-		{
-
-            FltReleaseFileNameInformation( nameInfo );
-        }
-
-        //
-        //  Set all of the operation information into the record
-        //
-
-        SpyLogPreOperationData( Data, FltObjects, recordList );
-
-        //
-        //  Pass the record to our completions routine and return that
-        //  we want our completion routine called.
-        //
-
-        if (Data->Iopb->MajorFunction == IRP_MJ_SHUTDOWN) 
-		{
-
-            //
-            //  Since completion callbacks are not supported for
-            //  this operation, do the completion processing now
-            //
-
-            SpyPostOperationCallback( Data,
-                                      FltObjects,
-                                      recordList,
-                                      0 );
-
-            returnStatus = FLT_PREOP_SUCCESS_NO_CALLBACK;
-
-        } 
-		else 
-		{
-
-            *CompletionContext = recordList;
-            returnStatus = FLT_PREOP_SUCCESS_WITH_CALLBACK;
-        }
-    }
-
-    return returnStatus;
 }
 
 
@@ -909,402 +722,80 @@ Return Value:
 
 --*/
 {
-    PRECORD_LIST recordList;
-    PRECORD_LIST reparseRecordList = NULL;
-    PLOG_RECORD reparseLogRecord;
-    PFLT_TAG_DATA_BUFFER tagData;
-    ULONG copyLength;
-
-    UNREFERENCED_PARAMETER( FltObjects );
-
-    recordList = (PRECORD_LIST)CompletionContext;
-
-    //
-    //  If our instance is in the process of being torn down don't bother to
-    //  log this record, free it now.
-    //
-
-    if (FlagOn(Flags,FLTFL_POST_OPERATION_DRAINING)) {
-
-        SpyFreeRecord( recordList );
-        return FLT_POSTOP_FINISHED_PROCESSING;
-    }
-
-    //
-    //  Set completion information into the record
-    //
-
-    SpyLogPostOperationData( Data, recordList );
-
-    //
-    //  Log reparse tag information if specified.
-    //
-
-    tagData = Data->TagData;
-    if (tagData) {
-
-        reparseRecordList = SpyNewRecord();
-
-        if (reparseRecordList) {
-
-            //
-            //  only copy the DATA portion of the information
-            //
-
-            RtlCopyMemory( &reparseRecordList->LogRecord.Data,
-                           &recordList->LogRecord.Data,
-                           sizeof(RECORD_DATA) );
-
-            reparseLogRecord = &reparseRecordList->LogRecord;
-
-            copyLength = FLT_TAG_DATA_BUFFER_HEADER_SIZE + tagData->TagDataLength;
-
-            if(copyLength > MAX_NAME_SPACE) {
-
-                copyLength = MAX_NAME_SPACE;
-            }
-
-            //
-            //  Copy reparse data
-            //
-
-            RtlCopyMemory(
-                &reparseRecordList->LogRecord.Name[0],
-                tagData,
-                copyLength
-                );
-
-            reparseLogRecord->RecordType |= RECORD_TYPE_FILETAG;
-            reparseLogRecord->Length += (ULONG) ROUND_TO_SIZE( copyLength, sizeof( PVOID ) );
-        }
-    }
-
-    //
-    //  Send the logged information to the user service.
-    //
-
-    SpyLog( recordList );
-
-    if (reparseRecordList) {
-
-        SpyLog( reparseRecordList );
-    }
-
-    //
-    //  For creates within a transaction enlist in the transaction
-    //  if we haven't already done.
-    //
-
-    if ((FltObjects->Transaction != NULL) &&
-        (Data->Iopb->MajorFunction == IRP_MJ_CREATE) &&
-        (Data->IoStatus.Status == STATUS_SUCCESS)) {
-
-        //
-        //  Enlist in the transaction.
-        //
-
-        SpyEnlistInTransaction( FltObjects );
-    }
+	UNREFERENCED_PARAMETER( Data );
+	UNREFERENCED_PARAMETER( FltObjects );
+	UNREFERENCED_PARAMETER( CompletionContext );
+	UNREFERENCED_PARAMETER( Flags );
 
     return FLT_POSTOP_FINISHED_PROCESSING;
 }
 
-
-NTSTATUS
-SpyEnlistInTransaction (
-    __in PCFLT_RELATED_OBJECTS FltObjects
-    )
-/*++
-
-Routine Description
-
-    Minispy calls this function to enlist in a transaction of interest. 
-
-Arguments
-
-    FltObjects - Contains parameters required to enlist in a transaction.
-
-Return value
-
-    Returns STATUS_SUCCESS if we were able to successfully enlist in a new transcation or if we
-    were already enlisted in the transaction. Returns an appropriate error code on a failure.
-    
---*/
+UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatus)
 {
-
-//#if MINISPY_VISTA
-//
-//    PMINISPY_TRANSACTION_CONTEXT transactionContext = NULL;
-//    PMINISPY_TRANSACTION_CONTEXT oldTransactionContext = NULL;
-//    PRECORD_LIST recordList;
-//    NTSTATUS status;
-//    static ULONG Sequence=1;
-//
-//    //
-//    //  This code is only built in the Vista environment, but
-//    //  we need to ensure this binary still runs down-level.  Return
-//    //  at this point if the transaction dynamic imports were not found.
-//    //
-//    //  If we find FltGetTransactionContext, we assume the other
-//    //  transaction APIs are also present.
-//    //
-//
-//    if (NULL == MiniSpyData.PFltGetTransactionContext) {
-//
-//        return STATUS_SUCCESS;
-//    }
-//
-//    //
-//    //  Try to get our context for this transaction. If we get
-//    //  one we have already enlisted in this transaction.
-//    //
-//
-//    status = (*MiniSpyData.PFltGetTransactionContext)( FltObjects->Instance,
-//                                                       FltObjects->Transaction,
-//                                                       &transactionContext );
-//
-//    if (NT_SUCCESS( status )) {
-//
-//        // 
-//        //  Check if we have already enlisted in the transaction. 
-//        //
-//
-//        if (FlagOn(transactionContext->Flags, MINISPY_ENLISTED_IN_TRANSACTION)) {
-//
-//            //
-//            //  FltGetTransactionContext puts a reference on the context. Release
-//            //  that now and return success.
-//            //
-//            
-//            FltReleaseContext( transactionContext );
-//            return STATUS_SUCCESS;
-//        }
-//
-//        //
-//        //  If we have not enlisted then we need to try and enlist in the transaction.
-//        //
-//        
-//        goto ENLIST_IN_TRANSACTION;
-//    }
-//
-//    //
-//    //  If the context does not exist create a new one, else return the error
-//    //  status to the caller.
-//    //
-//
-//    if (status != STATUS_NOT_FOUND) {
-//
-//        return status;
-//    }
-//
-//    //
-//    //  Allocate a transaction context.
-//    //
-//
-//    status = FltAllocateContext( FltObjects->Filter,
-//                                 FLT_TRANSACTION_CONTEXT,
-//                                 sizeof(MINISPY_TRANSACTION_CONTEXT),
-//                                 PagedPool,
-//                                 &transactionContext );
-//
-//    if (!NT_SUCCESS( status )) {
-//
-//        return status;
-//    }
-//
-//    //
-//    //  Set the context into the transaction
-//    //
-//
-//    RtlZeroMemory(transactionContext, sizeof(MINISPY_TRANSACTION_CONTEXT));
-//    transactionContext->Count = Sequence++;
-//
-//    ASSERT( MiniSpyData.PFltSetTransactionContext );
-//
-//    status = (*MiniSpyData.PFltSetTransactionContext)( FltObjects->Instance,
-//                                                       FltObjects->Transaction,
-//                                                       FLT_SET_CONTEXT_KEEP_IF_EXISTS,
-//                                                       transactionContext,
-//                                                       &oldTransactionContext );
-//
-//    if (!NT_SUCCESS( status )) {
-//
-//        FltReleaseContext( transactionContext );    //this will free the context
-//
-//        if (status != STATUS_FLT_CONTEXT_ALREADY_DEFINED) {
-//
-//            return status;
-//        }
-//
-//        ASSERT(oldTransactionContext != NULL);
-//        
-//        if (FlagOn(oldTransactionContext->Flags, MINISPY_ENLISTED_IN_TRANSACTION)) {
-//
-//            //
-//            //  If this context is already enlisted then release the reference
-//            //  which FltSetTransactionContext put on it and return success.
-//            //
-//            
-//            FltReleaseContext( oldTransactionContext );
-//            return STATUS_SUCCESS;
-//        }
-//
-//        //
-//        //  If we found an existing transaction then we should try and
-//        //  enlist in it. There is a race here in which the thread 
-//        //  which actually set the transaction context may fail to 
-//        //  enlist in the transaction and delete it later. It might so
-//        //  happen that we picked up a reference to that context here
-//        //  and successfully enlisted in that transaction. For now
-//        //  we have chosen to ignore this scenario.
-//        //
-//
-//        //
-//        //  If we are not enlisted then assign the right transactionContext
-//        //  and attempt enlistment.
-//        //
-//
-//        transactionContext = oldTransactionContext;            
-//    }
-//
-//ENLIST_IN_TRANSACTION: 
-//
-//    //
-//    //  Enlist on this transaction for notifications.
-//    //
-//
-//    ASSERT( MiniSpyData.PFltEnlistInTransaction );
-//
-//    status = (*MiniSpyData.PFltEnlistInTransaction)( FltObjects->Instance,
-//                                                     FltObjects->Transaction,
-//                                                     transactionContext,
-//                                                     FLT_MAX_TRANSACTION_NOTIFICATIONS );
-//
-//    //
-//    //  If the enlistment failed we might have to delete the context and remove
-//    //  our count.
-//    //
-//
-//    if (!NT_SUCCESS( status )) {
-//
-//        //
-//        //  If the error is that we are already enlisted then we do not need
-//        //  to delete the context. Otherwise we have to delete the context
-//        //  before releasing our reference.
-//        //
-//        
-//        if (status == STATUS_FLT_ALREADY_ENLISTED) {
-//
-//            status = STATUS_SUCCESS;
-//
-//        } else {
-//
-//            FltDeleteContext( transactionContext );
-//        }
-//        
-//        FltReleaseContext( transactionContext );
-//        return status;
-//    }
-//
-//    //
-//    //  Set the flag so that future enlistment efforts know that we
-//    //  successfully enlisted in the transaction.
-//    //
-//
-//    SetFlagInterlocked( &transactionContext->Flags, MINISPY_ENLISTED_IN_TRANSACTION );
-//    
-//    //
-//    //  The operation succeeded, remove our count
-//    //
-//
-//    FltReleaseContext( transactionContext );
-//
-//    //
-//    //  Log a record that a new transaction has started.
-//    //
-//
-//    recordList = SpyNewRecord();
-//
-//    if (recordList) {
-//
-//        SpyLogTransactionNotify( FltObjects, recordList, 0 );
-//
-//        //
-//        //  Send the logged information to the user service.
-//        //
-//
-//        SpyLog( recordList );
-//    }
-//
-//#endif // MINISPY_VISTA
-
-    return STATUS_SUCCESS;
-}
-
-
-//#if MINISPY_VISTA
-//
-//NTSTATUS
-//SpyKtmNotificationCallback (
-//    __in PCFLT_RELATED_OBJECTS FltObjects,
-//    __in PFLT_CONTEXT TransactionContext,
-//    __in ULONG TransactionNotification
-//    )
-//{
-//    PRECORD_LIST recordList;
-//
-//    UNREFERENCED_PARAMETER( TransactionContext );
-//
-//    //
-//    //  Try and get a log record
-//    //
-//
-//    recordList = SpyNewRecord();
-//
-//    if (recordList) {
-//
-//        SpyLogTransactionNotify( FltObjects, recordList, TransactionNotification );
-//
-//        //
-//        //  Send the logged information to the user service.
-//        //
-//
-//        SpyLog( recordList );
-//    }
-//
-//    return STATUS_SUCCESS;
-//}
-//
-//#endif // MINISPY_VISTA
-
-VOID
-SpyDeleteTxfContext (
-    __inout PMINISPY_TRANSACTION_CONTEXT Context,
-    __in FLT_CONTEXT_TYPE ContextType
-    )
-{
-    UNREFERENCED_PARAMETER( Context );
-    UNREFERENCED_PARAMETER( ContextType );
-
-    ASSERT(FLT_TRANSACTION_CONTEXT == ContextType);
-    ASSERT(Context->Count != 0);
-}
-
-NTSTATUS AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,WCHAR* pFileName)
-{
+	UNICODE_STRING* pUnicodeName = NULL;
 	PFLT_FILE_NAME_INFORMATION FileNameInformation = NULL;
-	NTSTATUS status = FltGetFileNameInformation( Data,
-		FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_ALWAYS_ALLOW_CACHE_LOOKUP
-		&FileNameInformation );
+	NTSTATUS status = STATUS_SUCCESS;
+
+	status = FltGetFileNameInformation( Data,
+		FLT_FILE_NAME_NORMALIZED | 
+		FLT_FILE_NAME_QUERY_ALWAYS_ALLOW_CACHE_LOOKUP
+		&FileNameInformation);
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("AllocateAndGetFileName: FltGetFileNameInformation(FLT_FILE_NAME_NORMALIZED) faild,status=0x%x\n",status));
+		status = FltGetFileNameInformation( Data,
+			FLT_FILE_NAME_OPENED |
+			FLT_FILE_NAME_QUERY_ALWAYS_ALLOW_CACHE_LOOKUP,
+			&FileNameInformation );
+		if (!NT_SUCCESS(status))
+		{
+			KdPrint(("AllocateAndGetFileName: FltGetFileNameInformation(FLT_FILE_NAME_OPENED) faild,status=0x%x\n",status));
+		}
+	}
+
 	if (NT_SUCCESS(status))
 	{
 		UNICODE_STRING* DosName = NULL;
 		status = FltParseFileNameInformation(FileNameInformation);
 		if (NT_SUCCESS(status))
 		{
-			status = IoVolumeDeviceToDosName(FileNameInformation->Volume,DosName);
+			if (FileNameInformation->Volume.Length &&
+				FileNameInformation->Name.Length &&
+				FileNameInformation->ParentDir.Length)
+			{
+				USHORT NameLeng = FileNameInformation->Volume.Length + FileNameInformation->Name.Length + FileNameInformation->ParentDir.Length+sizeof(UNICODE_STRING);
+				ASSERT(KeAreAllApcsDisabled());
+				status = IoVolumeDeviceToDosName((PVOID)(FileNameInformation->Volume.Buffer),DosName);
+				if (NT_SUCCESS(status))
+				{
+					pUnicodeName = (UNICODE_STRING*)ExAllocatePoolWithTag(NonPagedPool,NameLeng,'EMAN');
+					if (pUnicodeName)
+					{
+						RtlZeroMemory(pUnicodeName,NameLeng);
+						pUnicodeName->Buffer = (WCHAR*)(pUnicodeName+1);
+						pUnicodeName->Length = 0;
+						pUnicodeName->MaximumLength = NameLeng-sizeof(UNICODE_STRING);
+
+						RtlAppendUnicodeStringToString(pUnicodeName,DosName);
+						RtlAppendUnicodeStringToString(pUnicodeName,&FileNameInformation->ParentDir);
+						RtlAppendUnicodeStringToString(pUnicodeName,&FileNameInformation->Name);
+					}
+				}
+				else
+				{
+					KdPrint(("AllocateAndGetFileName: ExAllocatePoolWithTag faild,status=0x%x\n",status));
+				}
+			}
+			else
+			{
+				KdPrint(("AllocateAndGetFileName: Volume.Length=%d,Name.Length=%d,ParentDir.Length=%d\n",
+					FileNameInformation->Volume.Length,FileNameInformation->Name.Length,FileNameInformation->ParentDir.Length));
+			}
 		}
 	}
+
+	*pStatus = status;
+	return pUnicodeName;
 }
 
 NTSTATUS GlobalInitial()
@@ -1550,6 +1041,37 @@ BOOLEAN IsWhitePid(ULONG Pid)
 			break;
 		}
 	}
+
+	return bRet;
+}
+
+BOOLEAN PreCreateProcess(PFLT_IO_PARAMETER_BLOCK pIopb)
+{
+	BOOLEAN bRet = FALSE;
+	ULONG CreateOptions = 0;
+	ULONG DispositionOptions = 0;
+	PUNICODE_STRING pUnicodeName = NULL;
+	ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
+	if (IsWhitePid(CurrPid))
+	{
+		return bRet;
+	}
+
+	CreateOptions = Data->Iopb->Parameters.Create.Options & 0x00FFFFFF;
+	DispositionOptions = (Data->Iopb->Parameters.Create.Options) >> 24;
+	pUnicodeName = AllocateAndGetFileName(Data,&status);
+	if (NULL == pUnicodeName)
+	{
+		return FLT_PREOP_SUCCESS_WITH_CALLBACK;
+	}
+
+	return bRet;
+}
+
+BOOLEAN PreSetInforProcess(PFLT_IO_PARAMETER_BLOCK pIopb)
+{
+	BOOLEAN bRet = FALSE;
+	
 
 	return bRet;
 }
