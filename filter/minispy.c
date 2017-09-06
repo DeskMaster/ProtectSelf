@@ -30,6 +30,9 @@ PVOID gRegistrationHandle = NULL;
 LARGE_INTEGER  gCmRegCookie;
 
 PROCESS_WHITE_LIST gPidWhiteList;
+ULONG gFileProtect = 0;
+ULONG gProcessProtect = 0;
+ULONG gRegProtect = 0;
 //---------------------------------------------------------------------------
 //  Function prototypes
 //---------------------------------------------------------------------------
@@ -101,10 +104,10 @@ AllocateAndGetFileName(
 	__in NTSTATUS* pStatus);
 
 BOOLEAN 
-PreCreateProcess(PFLT_IO_PARAMETER_BLOCK pIopb);
+PreCreateProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb);
 
 BOOLEAN
-PreSetInforProcess(PFLT_IO_PARAMETER_BLOCK pIopb);
+PreSetInforProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb);
 
 //---------------------------------------------------------------------------
 //  Assign text sections for each routine.
@@ -794,6 +797,11 @@ UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatu
 		}
 	}
 
+	if (FileNameInformation)
+	{
+		FltReleaseFileNameInformation(FileNameInformation);
+	}
+
 	*pStatus = status;
 	return pUnicodeName;
 }
@@ -1044,31 +1052,61 @@ BOOLEAN IsWhitePid(ULONG Pid)
 
 	return bRet;
 }
-
-BOOLEAN PreCreateProcess(PFLT_IO_PARAMETER_BLOCK pIopb)
+//
+BOOLEAN IsProtectFile(__in PUNICODE_STRING pFileName)
 {
 	BOOLEAN bRet = FALSE;
+
+	return bRet;
+}
+//
+BOOLEAN PreCreateProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb)
+{
+	BOOLEAN bRet = FALSE;
+	NTSTATUS status = STATUS_SUCCESS;
 	ULONG CreateOptions = 0;
 	ULONG DispositionOptions = 0;
+	ULONG DesireAccess = 0;
+	ULONG ModifyDesireAccess = DELETE|FILE_WRITE_DATA|FILE_WRITE_ATTRIBUTES|FILE_WRITE_EA|FILE_APPEND_DATA;
 	PUNICODE_STRING pUnicodeName = NULL;
 	ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
-	if (IsWhitePid(CurrPid))
-	{
-		return bRet;
-	}
 
-	CreateOptions = Data->Iopb->Parameters.Create.Options & 0x00FFFFFF;
-	DispositionOptions = (Data->Iopb->Parameters.Create.Options) >> 24;
-	pUnicodeName = AllocateAndGetFileName(Data,&status);
-	if (NULL == pUnicodeName)
+	do 
 	{
-		return FLT_PREOP_SUCCESS_WITH_CALLBACK;
+		if (IsWhitePid(CurrPid))
+		{
+			break;
+		}
+
+		DesireAccess = pIopb->Parameters.Create.SecurityContext->DesiredAccess;
+		CreateOptions = pIopb->Parameters.Create.Options & 0x00FFFFFF;
+		DispositionOptions = (pIopb->Parameters.Create.Options) >> 24;
+
+		if ((DesireAccess&ModifyDesireAccess) ||
+			(DispositionOptions&FILE_CREATE) ||
+			(CreateOptions&FILE_DELETE_ON_CLOSE))
+		{
+			pUnicodeName = AllocateAndGetFileName(Data,&status);
+			if (NULL == pUnicodeName)
+			{
+				break;
+			}
+
+			if(bRet= IsProtectFile(pUnicodeName))
+				break;
+
+		}
+	} while (FALSE);
+
+	if (pUnicodeName)
+	{
+		ExFreePool(pUnicodeName);
 	}
 
 	return bRet;
 }
-
-BOOLEAN PreSetInforProcess(PFLT_IO_PARAMETER_BLOCK pIopb)
+//
+BOOLEAN PreSetInforProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb)
 {
 	BOOLEAN bRet = FALSE;
 	

@@ -236,13 +236,38 @@ typedef struct _COMMAND_MESSAGE {
 #define FlagOn(_F,_SF)        ((_F) & (_SF))
 #endif
 
-//White Pid = Protect Pid
+#define FILE_READ_ONLY			0x00000001
+#define FILE_ACCESS_FORBID		0x00000002
+#define REG_READ_ONLY			0x00000010
+#define REG_ACCESS_FORBID		0x00000020
+#define PROCESS_PROTECT_ON		0x00000100
+
+#define MAX_FILE_NUM			20
+#define MAX_REG_NUM				20
 #define MAX_WHITE_PROCESS_NUM	20
+#define MAX_PATH_LENGTH			512
+
+//White Pid = Protect Pid
 typedef struct _PROCESS_WHITE_LIST
 {
 	ULONG WhiteProcessNum;
 	ULONG PidArray[MAX_WHITE_PROCESS_NUM];
 }PROCESS_WHITE_LIST;
+
+typedef struct _PROTECT_PATH_NODE
+{
+	ULONG PathLeng;
+	WCHAR FilePath[MAX_PATH_LENGTH];
+}PROTECT_PATH_NODE;
+
+//
+typedef struct _FILE_PATH_LIST
+{
+	ULONG FilePathNum;
+	ULONG PidArray[MAX_WHITE_PROCESS_NUM];
+}FILE_PATH_LIST;
+
+//
 
 
 #endif /* __MINISPY_H__ */
