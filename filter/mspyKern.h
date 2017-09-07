@@ -341,6 +341,9 @@ SpyDeleteTxfContext (
     );
 
 
+extern PROCESS_WHITE_LIST gPidWhiteList;
+extern PATH_LIST gFilePathList;
+extern PATH_LIST gRegPathList;
 
 #endif  //__MSPYKERN_H__
 

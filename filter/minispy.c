@@ -29,10 +29,14 @@ NTSTATUS StatusToBreakOn = 0;
 PVOID gRegistrationHandle = NULL;
 LARGE_INTEGER  gCmRegCookie;
 
-PROCESS_WHITE_LIST gPidWhiteList;
 ULONG gFileProtect = 0;
 ULONG gProcessProtect = 0;
 ULONG gRegProtect = 0;
+
+PROCESS_WHITE_LIST gPidWhiteList;
+PATH_LIST gFilePathList;
+PATH_LIST gRegPathList;
+
 //---------------------------------------------------------------------------
 //  Function prototypes
 //---------------------------------------------------------------------------
@@ -810,6 +814,8 @@ NTSTATUS GlobalInitial()
 {
 	NTSTATUS status = STATUS_SUCCESS;
 	RtlZeroMemory(gPidWhiteList, sizeof(PROCESS_WHITE_LIST));
+	RtlZeroMemory(gFilePathList,sizeof(PATH_LIST));
+	RtlZeroMemory(gRegPathList,sizeof(PATH_LIST));
 
 	return status;
 }
@@ -1056,7 +1062,15 @@ BOOLEAN IsWhitePid(ULONG Pid)
 BOOLEAN IsProtectFile(__in PUNICODE_STRING pFileName)
 {
 	BOOLEAN bRet = FALSE;
+	ULONG i = 0;
+	for (;i<gFilePathList.PathNum;i++)
+	{
+		if (pFileName->Length==gFilePathList.PathArray[i].PathLeng &&
+			wmemcmp(pFileName->Buffer,gFilePathList.PathArray[i].Path,gFilePathList.PathArray[i].PathLeng);
+		{
 
+		}
+	}
 	return bRet;
 }
 //

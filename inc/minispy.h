@@ -254,21 +254,20 @@ typedef struct _PROCESS_WHITE_LIST
 	ULONG PidArray[MAX_WHITE_PROCESS_NUM];
 }PROCESS_WHITE_LIST;
 
+//
 typedef struct _PROTECT_PATH_NODE
 {
 	ULONG PathLeng;
-	WCHAR FilePath[MAX_PATH_LENGTH];
+	ULONG Access;
+	WCHAR Path[MAX_PATH_LENGTH];
 }PROTECT_PATH_NODE;
 
 //
-typedef struct _FILE_PATH_LIST
+typedef struct _PATH_LIST
 {
-	ULONG FilePathNum;
-	ULONG PidArray[MAX_WHITE_PROCESS_NUM];
-}FILE_PATH_LIST;
-
-//
-
+	ULONG PathNum;
+	PROTECT_PATH_NODE PathArray[MAX_FILE_NUM];
+}PATH_LIST;
 
 #endif /* __MINISPY_H__ */
 
