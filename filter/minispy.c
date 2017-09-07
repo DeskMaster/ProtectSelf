@@ -1339,9 +1339,6 @@ CtrlDeviceControl (
 	ULONG Ioctl;
 	NTSTATUS Status;
 
-	UNREFERENCED_PARAMETER (DeviceObject);
-
-
 	Status = STATUS_SUCCESS;
 
 	IrpStack = IoGetCurrentIrpStackLocation (Irp);
@@ -1360,7 +1357,6 @@ CtrlDeviceControl (
 
 		Status = TdControlUnprotect (DeviceObject, Irp);
 		break;
-
 
 	default:
 		DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "TdDeviceControl: unrecognized ioctl code 0x%x\n", Ioctl);
