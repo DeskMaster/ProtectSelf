@@ -236,6 +236,12 @@ typedef struct _COMMAND_MESSAGE {
 #define FlagOn(_F,_SF)        ((_F) & (_SF))
 #endif
 
+
+///////////////////////////////////////////////////////////////////////////////////////
+
+#define CTRLLINKNAME_STRING             L"\\DosDevices\\CtrSpy"
+#define CTRLNTDEVICE_STRING             L"\\Device\\CtrSpy"
+
 #define FILE_READ_ONLY			0x00000001
 #define FILE_ACCESS_FORBID		0x00000002
 #define REG_READ_ONLY			0x00000010
@@ -257,9 +263,9 @@ typedef struct _PROCESS_WHITE_LIST
 //
 typedef struct _PROTECT_PATH_NODE
 {
-	ULONG PathLeng;
+	ULONG PathLeng;					//The length in bytes of the string 
 	ULONG Access;
-	WCHAR Path[MAX_PATH_LENGTH];
+	WCHAR Path[MAX_PATH_LENGTH];	//lower case
 }PROTECT_PATH_NODE;
 
 //
