@@ -125,6 +125,15 @@ IsProtectReg(__in WCHAR* pRegName, __in ULONG FileNameLeng);
 UNICODE_STRING* 
 GetRegFullPath(__in PVOID pObject);
 
+__drv_dispatchType(IRP_MJ_CREATE) 
+DRIVER_DISPATCH CtrlDeviceCreate;
+__drv_dispatchType(IRP_MJ_CLOSE) 
+DRIVER_DISPATCH CtrlDeviceClose;
+__drv_dispatchType(IRP_MJ_CLEANUP) 
+DRIVER_DISPATCH CtrlDeviceCleanup;
+__drv_dispatchType(IRP_MJ_DEVICE_CONTROL) 
+DRIVER_DISPATCH CtrlDeviceControl;
+
 //---------------------------------------------------------------------------
 //  Assign text sections for each routine.
 //---------------------------------------------------------------------------
@@ -682,13 +691,16 @@ Return Value:
 		return FLT_PREOP_SUCCESS_WITH_CALLBACK;
 	}
 
-	if (pIopb->MajorFunction == IRP_MJ_CREATE)
+	if (gFileProtect)
 	{
-		bForbid = PreCreateProcess(pIopb);
-	}
-	else if(pIopb->MajorFunction == IRP_MJ_SET_INFORMATION)
-	{
-		bForbid = PreSetInforProcess(pIopb);
+		if (pIopb->MajorFunction == IRP_MJ_CREATE)
+		{
+			bForbid = PreCreateProcess(Data,pIopb);
+		}
+		else if(pIopb->MajorFunction == IRP_MJ_SET_INFORMATION)
+		{
+			bForbid = PreSetInforProcess(Data,pIopb);
+		}
 	}
 
 	if(bForbid)
@@ -696,11 +708,9 @@ Return Value:
 		Data->IoStatus.Information = 0;
 		Data->IoStatus.Status = STATUS_ACCESS_DENIED;
 		return FLT_PREOP_COMPLETE;
-
 	}
 
 	return FLT_PREOP_SUCCESS_WITH_CALLBACK;
-
 }
 
 
@@ -910,7 +920,8 @@ ProcessObjectPreCallback(
 		return OB_PREOP_SUCCESS;
 	}
 
-	if (OperationInformation->Parameters->CreateHandleInformation.OriginalDesiredAccess&dwMask)
+	if (gProcessProtect &&
+		(OperationInformation->Parameters->CreateHandleInformation.OriginalDesiredAccess & dwMask))
 	{
 		ULONG	CurrPid = HandleToUlong(PsGetCurrentProcessId());
 		ULONG	TargetPid = HandleToUlong(PsGetProcessId((PEPROCESS)OperationInformation->Object));
@@ -925,7 +936,6 @@ ProcessObjectPreCallback(
 
 	return OB_PREOP_SUCCESS;
 }
-
 
 UNICODE_STRING* GetRegFullPath(__in PVOID pObject)
 {
@@ -980,7 +990,8 @@ RegistryCallback(
 	REG_NOTIFY_CLASS RegNotifyClass = (REG_NOTIFY_CLASS)Argument1;
 
 	ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
-	if (IsWhitePid(CurrPid))
+	if (IsWhitePid(CurrPid) &&
+		!gRegProtect)
 	{
 		return status;
 	}
@@ -1219,4 +1230,150 @@ BOOLEAN PreSetInforProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb
 	}
 
 	return bRet;
+}
+
+//
+NTSTATUS CreateCDO(PDEVICE_OBJECT* DeviceObject,WCHAR* pNtDeviceName,WCHAR* pLinkName)
+{
+	NTSTATUS Status;
+	UNICODE_STRING NtDeviceName;
+	UNICODE_STRING DosDevicesLinkName;
+
+	RtlInitUnicodeString(&NtDeviceName,pNtDeviceName);
+	RtlInitUnicodeString(&DosDevicesLinkName,pLinkName);
+
+	do 
+	{
+		Status = IoCreateDevice (                    
+			MiniSpyData.DriverObject,                 // pointer to driver object
+			0,                            // device extension size
+			&NtDeviceName,                // device name
+			FILE_DEVICE_UNKNOWN,          // device type
+			0,                            // device characteristics
+			FALSE,                        // not exclusive
+			DeviceObject);                     // returned device object pointer
+
+		if (NT_SUCCESS(Status))
+		{
+			Status = IoCreateSymbolicLink (&DosDevicesLinkName, &NtDeviceName);
+			if (!NT_SUCCESS(Status))
+			{
+				IoDeleteDevice(*DeviceObject);
+				break;
+			}
+
+			MiniSpyData.DriverObject->MajorFunction[IRP_MJ_CREATE]         = CtrlDeviceCreate;
+			MiniSpyData.DriverObject->MajorFunction[IRP_MJ_CLOSE]          = CtrlDeviceClose;
+			MiniSpyData.DriverObject->MajorFunction[IRP_MJ_CLEANUP]        = CtrlDeviceCleanup;
+			MiniSpyData.DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = CtrlDeviceControl;
+		}
+	} while (FALSE);
+
+	return Status;
+}
+
+VOID DeleteCDO(PDEVICE_OBJECT DeviceObject,WCHAR* pLinkName)
+{
+	UNICODE_STRING DosDevicesLinkName;
+	RtlInitUnicodeString(&DosDevicesLinkName,pLinkName);
+	if (DeviceObject)
+	{
+		IoDeleteSymbolicLink(&DosDevicesLinkName);
+		IoDeleteDevice(DeviceObject);
+	}
+}
+
+
+NTSTATUS
+CtrlDeviceCreate (
+	IN PDEVICE_OBJECT  DeviceObject,
+	IN PIRP  Irp
+	)
+{
+	UNREFERENCED_PARAMETER (DeviceObject);
+
+	Irp->IoStatus.Status = STATUS_SUCCESS;
+	Irp->IoStatus.Information = 0;
+	IoCompleteRequest (Irp, IO_NO_INCREMENT);
+
+	return STATUS_SUCCESS;
+}
+
+NTSTATUS
+CtrlDeviceClose (
+	IN PDEVICE_OBJECT  DeviceObject,
+	IN PIRP  Irp
+	)
+{
+	UNREFERENCED_PARAMETER (DeviceObject);
+
+	Irp->IoStatus.Status = STATUS_SUCCESS;
+	Irp->IoStatus.Information = 0;
+	IoCompleteRequest (Irp, IO_NO_INCREMENT);
+
+	return STATUS_SUCCESS;
+}
+
+NTSTATUS
+CtrlDeviceCleanup (
+	IN PDEVICE_OBJECT  DeviceObject,
+	IN PIRP  Irp
+	)
+{
+	UNREFERENCED_PARAMETER (DeviceObject);
+
+	Irp->IoStatus.Status = STATUS_SUCCESS;
+	Irp->IoStatus.Information = 0;
+	IoCompleteRequest (Irp, IO_NO_INCREMENT);
+
+	return STATUS_SUCCESS;
+}
+
+NTSTATUS
+CtrlDeviceControl (
+	IN PDEVICE_OBJECT  DeviceObject,
+	IN PIRP  Irp
+	)
+{
+	PIO_STACK_LOCATION IrpStack;
+	ULONG Ioctl;
+	NTSTATUS Status;
+
+	UNREFERENCED_PARAMETER (DeviceObject);
+
+
+	Status = STATUS_SUCCESS;
+
+	IrpStack = IoGetCurrentIrpStackLocation (Irp);
+	Ioctl = IrpStack->Parameters.DeviceIoControl.IoControlCode;
+
+	DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "TdDeviceControl: entering - ioctl code 0x%x\n", Ioctl);
+
+	switch (Ioctl)
+	{
+	case TD_IOCTL_PROTECT_NAME_CALLBACK:
+
+		Status = TdControlProtectName (DeviceObject, Irp);
+		break;
+
+	case TD_IOCTL_UNPROTECT_CALLBACK:
+
+		Status = TdControlUnprotect (DeviceObject, Irp);
+		break;
+
+
+	default:
+		DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "TdDeviceControl: unrecognized ioctl code 0x%x\n", Ioctl);
+		break;
+	}
+
+	//
+	// Complete the irp and return.
+	//
+
+	Irp->IoStatus.Status = Status;
+	IoCompleteRequest (Irp, IO_NO_INCREMENT);
+
+	DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "TdDeviceControl leaving - status 0x%x\n", Status);
+	return Status;
 }
