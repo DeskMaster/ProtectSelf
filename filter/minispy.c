@@ -113,6 +113,18 @@ PreCreateProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb);
 BOOLEAN
 PreSetInforProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb);
 
+BOOLEAN 
+IsWhitePid(ULONG Pid);
+
+BOOLEAN 
+IsProtectFile(__in WCHAR* pFileName, __in ULONG FileNameLeng);
+
+BOOLEAN 
+IsProtectReg(__in WCHAR* pRegName, __in ULONG FileNameLeng);
+
+UNICODE_STRING* 
+GetRegFullPath(__in PVOID pObject);
+
 //---------------------------------------------------------------------------
 //  Assign text sections for each routine.
 //---------------------------------------------------------------------------
@@ -982,8 +994,11 @@ RegistryCallback(
 				pRegDeleteKeyInfor->Object && 
 				pRegName = GetRegFullPath(pRegDeleteKeyInfor->Object))
 			{
+				if (IsProtectReg(pRegName->Buffer,pRegName->Length))
+				{
+					status = STATUS_ACCESS_DENIED;
+				}
 				KdPrint(("RegistryCallback: RegNtPreDeleteKey (%wZ)\n",pRegName));
-				ExFreePool(pRegName);
 			}
 			break;
 		}
@@ -995,7 +1010,10 @@ RegistryCallback(
 				pRegName = GetRegFullPath(pDeleteValueKeyInfo->Object))
 			{
 				KdPrint(("RegistryCallback: RegNtDeleteValueKey (%wZ)\n",pRegName));
-				ExFreePool(pRegName);
+				if (IsProtectReg(pRegName->Buffer, pRegName->Length))
+				{
+					status = STATUS_ACCESS_DENIED;
+				}
 			}
 			break;
 		}
@@ -1007,7 +1025,10 @@ RegistryCallback(
 				pRegName = GetRegFullPath(pSetValueKeyInfo->Object))
 			{
 				KdPrint(("RegistryCallback: RegNtSetValueKey (%wZ)\n",pRegName));
-				ExFreePool(pRegName);
+				if (IsProtectReg(pRegName->Buffer, pRegName->Length))
+				{
+					status = STATUS_ACCESS_DENIED;
+				}
 			}
 			break;
 		}
@@ -1019,7 +1040,10 @@ RegistryCallback(
 				pRegName = GetRegFullPath(pRenameKeyInfo->Object))
 			{
 				KdPrint(("RegistryCallback: RegNtRenameKey (%wZ)\n",pRegName));
-				ExFreePool(pRegName);
+				if (IsProtectReg(pRegName->Buffer, pRegName->Length))
+				{
+					status = STATUS_ACCESS_DENIED;
+				}
 			}
 			break;
 		}
@@ -1043,6 +1067,7 @@ VOID LoadImageNotify(
 
 }
 
+//
 BOOLEAN IsWhitePid(ULONG Pid)
 {
 	BOOLEAN bRet = FALSE;
@@ -1058,21 +1083,41 @@ BOOLEAN IsWhitePid(ULONG Pid)
 
 	return bRet;
 }
-//
-BOOLEAN IsProtectFile(__in PUNICODE_STRING pFileName)
+
+//FileNameLeng, in bytes
+BOOLEAN IsProtectFile(__in WCHAR* pFileName,__in ULONG FileNameLeng)
 {
 	BOOLEAN bRet = FALSE;
 	ULONG i = 0;
 	for (;i<gFilePathList.PathNum;i++)
 	{
-		if (pFileName->Length==gFilePathList.PathArray[i].PathLeng &&
-			wmemcmp(pFileName->Buffer,gFilePathList.PathArray[i].Path,gFilePathList.PathArray[i].PathLeng);
+		if (FileNameLeng == gFilePathList.PathArray[i].PathLeng &&
+			FileNameLeng == RtlCompareMemory(pFileName,gFilePathList.PathArray[i].Path, FileNameLeng))
 		{
-
+			bRet = TRUE;
+			break;
 		}
 	}
 	return bRet;
 }
+
+//
+BOOLEAN IsProtectReg(__in WCHAR* pRegName, __in ULONG FileNameLeng)
+{
+	BOOLEAN bRet = FALSE;
+	ULONG i = 0;
+	for (; i < gRegPathList.PathNum; i++)
+	{
+		if (FileNameLeng == gRegPathList.PathArray[i].PathLeng; &&
+			FileNameLeng == RtlCompareMemory(pRegName, gRegPathList.PathArray[i].Path, FileNameLeng))
+		{
+			bRet = TRUE;
+			break;
+		}
+	}
+	return bRet;
+}
+
 //
 BOOLEAN PreCreateProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb)
 {
@@ -1106,9 +1151,10 @@ BOOLEAN PreCreateProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb)
 				break;
 			}
 
-			if(bRet= IsProtectFile(pUnicodeName))
+			if(bRet= IsProtectFile(pUnicodeName->Buffer,pUnicodeName->Length))
+			{
 				break;
-
+			}
 		}
 	} while (FALSE);
 
@@ -1119,11 +1165,58 @@ BOOLEAN PreCreateProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb)
 
 	return bRet;
 }
+
 //
 BOOLEAN PreSetInforProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb)
 {
 	BOOLEAN bRet = FALSE;
-	
+	USHORT FileInforClass = pIopb->Parameters.SetFileInformation.FileInformationClass;
+	if (FileInforClass == FileRenameInformation ||
+		FileInforClass == FileDispositionInformation)
+	{
+		NTSTATUS status;
+		PUNICODE_STRING pUnicodeName = NULL;
+		ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
+
+		do
+		{
+			if (IsWhitePid(CurrPid))
+			{
+				break;
+			}
+
+			pUnicodeName = AllocateAndGetFileName(Data, &status);
+			if (NULL == pUnicodeName)
+			{
+				break;
+			}
+
+			if (bRet = IsProtectFile(pUnicodeName->Buffer,pUnicodeName->Length))
+			{
+				break;
+			}
+
+			if (FileInforClass== FileRenameInformation)
+			{
+				FILE_RENAME_INFORMATION* lpRenameInfor = (FILE_RENAME_INFORMATION*)pIopb->Parameters.SetFileInformation.InfoBuffer;
+				if (lpRenameInfor && 
+					lpRenameInfor->FileName && 
+					lpRenameInfor->FileNameLength)
+				{
+					if (bRet = IsProtectFile(lpRenameInfor->FileName, lpRenameInfor->FileNameLength))
+					{
+						break;
+					}
+				}
+			}
+
+		} while (FALSE);
+
+		if (pUnicodeName)
+		{
+			ExFreePool(pUnicodeName);
+		}
+	}
 
 	return bRet;
 }
