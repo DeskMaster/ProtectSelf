@@ -29,6 +29,7 @@ NTSTATUS StatusToBreakOn = 0;
 PVOID gRegistrationHandle = NULL;
 LARGE_INTEGER  gCmRegCookie;
 
+DEVICE_OBJECT* CtrlDeviceObject=NULL;
 ULONG gFileProtect = 0;
 ULONG gProcessProtect = 0;
 ULONG gRegProtect = 0;
@@ -83,6 +84,8 @@ NTSTATUS UnInitialCallBack();
 
 NTSTATUS GlobalInitial();
 
+VOID GlobalUnInitial();
+
 OB_PREOP_CALLBACK_STATUS
 ProcessObjectPreCallback(
 	__in PVOID  RegistrationContext,
@@ -124,6 +127,12 @@ IsProtectReg(__in WCHAR* pRegName, __in ULONG FileNameLeng);
 
 UNICODE_STRING* 
 GetRegFullPath(__in PVOID pObject);
+
+NTSTATUS 
+CreateCDO(PDEVICE_OBJECT* DeviceObject,WCHAR* pNtDeviceName,WCHAR* pLinkName);
+
+VOID 
+DeleteCDO(PDEVICE_OBJECT DeviceObject,WCHAR* pLinkName);
 
 __drv_dispatchType(IRP_MJ_CREATE) 
 DRIVER_DISPATCH CtrlDeviceCreate;
@@ -188,7 +197,7 @@ Return Value:
     try {
 
 		gCmRegCookie.QuadPart = 0;
-		status = InitialCallBack();
+		status = GlobalInitial();
 		if (!NT_SUCCESS( status )) 
 		{
 			leave;
@@ -274,7 +283,7 @@ Return Value:
         if (!NT_SUCCESS( status ) ) 
 		{
 
-			UnInitialCallBack();
+			GlobalUnInitial();
 
 			if (NULL != MiniSpyData.ServerPort) 
 			{
@@ -401,7 +410,7 @@ Return Value:
     //  Close the server port. This will stop new connections.
     //
 
-	UnInitialCallBack();
+	GlobalUnInitial();
 
     FltCloseCommunicationPort( MiniSpyData.ServerPort );
 
@@ -767,7 +776,7 @@ UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatu
 
 	status = FltGetFileNameInformation( Data,
 		FLT_FILE_NAME_NORMALIZED | 
-		FLT_FILE_NAME_QUERY_ALWAYS_ALLOW_CACHE_LOOKUP
+		FLT_FILE_NAME_QUERY_ALWAYS_ALLOW_CACHE_LOOKUP,
 		&FileNameInformation);
 	if (!NT_SUCCESS(status))
 	{
@@ -835,11 +844,23 @@ UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatu
 NTSTATUS GlobalInitial()
 {
 	NTSTATUS status = STATUS_SUCCESS;
-	RtlZeroMemory(gPidWhiteList, sizeof(PROCESS_WHITE_LIST));
-	RtlZeroMemory(gFilePathList,sizeof(PATH_LIST));
-	RtlZeroMemory(gRegPathList,sizeof(PATH_LIST));
+	RtlZeroMemory(&gPidWhiteList, sizeof(PROCESS_WHITE_LIST));
+	RtlZeroMemory(&gFilePathList,sizeof(PATH_LIST));
+	RtlZeroMemory(&gRegPathList,sizeof(PATH_LIST));
+
+	status = CreateCDO(&CtrlDeviceObject,CTRLLINKNAME_STRING,CTRLNTDEVICE_STRING);
+	if (NT_SUCCESS(status))
+	{
+		status = InitialCallBack();
+	}
 
 	return status;
+}
+
+VOID GlobalUnInitial()
+{
+	DeleteCDO(CtrlDeviceObject,CTRLNTDEVICE_STRING);
+	UnInitialCallBack();
 }
 
 NTSTATUS InitialCallBack()
@@ -1003,7 +1024,7 @@ RegistryCallback(
 			REG_DELETE_KEY_INFORMATION* pRegDeleteKeyInfor = (REG_DELETE_KEY_INFORMATION*)Argument2;
 			if ( pRegDeleteKeyInfor && 
 				pRegDeleteKeyInfor->Object && 
-				pRegName = GetRegFullPath(pRegDeleteKeyInfor->Object))
+				(pRegName = GetRegFullPath(pRegDeleteKeyInfor->Object)))
 			{
 				if (IsProtectReg(pRegName->Buffer,pRegName->Length))
 				{
@@ -1018,7 +1039,7 @@ RegistryCallback(
 			PREG_DELETE_VALUE_KEY_INFORMATION pDeleteValueKeyInfo = (PREG_DELETE_VALUE_KEY_INFORMATION)Argument2;
 			if ( pDeleteValueKeyInfo && 
 				pDeleteValueKeyInfo->Object &&
-				pRegName = GetRegFullPath(pDeleteValueKeyInfo->Object))
+				(pRegName = GetRegFullPath(pDeleteValueKeyInfo->Object)))
 			{
 				KdPrint(("RegistryCallback: RegNtDeleteValueKey (%wZ)\n",pRegName));
 				if (IsProtectReg(pRegName->Buffer, pRegName->Length))
@@ -1033,7 +1054,7 @@ RegistryCallback(
 			PREG_SET_VALUE_KEY_INFORMATION pSetValueKeyInfo = (PREG_SET_VALUE_KEY_INFORMATION)Argument2;
 			if ( pSetValueKeyInfo && 
 				pSetValueKeyInfo->Object &&
-				pRegName = GetRegFullPath(pSetValueKeyInfo->Object))
+				(pRegName = GetRegFullPath(pSetValueKeyInfo->Object)))
 			{
 				KdPrint(("RegistryCallback: RegNtSetValueKey (%wZ)\n",pRegName));
 				if (IsProtectReg(pRegName->Buffer, pRegName->Length))
@@ -1048,7 +1069,7 @@ RegistryCallback(
 			PREG_RENAME_KEY_INFORMATION pRenameKeyInfo = (PREG_RENAME_KEY_INFORMATION)Argument2;
 			if ( pRenameKeyInfo && 
 				pRenameKeyInfo->Object &&
-				pRegName = GetRegFullPath(pRenameKeyInfo->Object))
+				(pRegName = GetRegFullPath(pRenameKeyInfo->Object)))
 			{
 				KdPrint(("RegistryCallback: RegNtRenameKey (%wZ)\n",pRegName));
 				if (IsProtectReg(pRegName->Buffer, pRegName->Length))
@@ -1075,7 +1096,7 @@ VOID LoadImageNotify(
 	__in HANDLE ProcessId,                // pid into which image is being mapped
 	__in PIMAGE_INFO ImageInfo)
 {
-
+	//KdPrint((""));
 }
 
 //
@@ -1119,7 +1140,7 @@ BOOLEAN IsProtectReg(__in WCHAR* pRegName, __in ULONG FileNameLeng)
 	ULONG i = 0;
 	for (; i < gRegPathList.PathNum; i++)
 	{
-		if (FileNameLeng == gRegPathList.PathArray[i].PathLeng; &&
+		if (FileNameLeng == gRegPathList.PathArray[i].PathLeng &&
 			FileNameLeng == RtlCompareMemory(pRegName, gRegPathList.PathArray[i].Path, FileNameLeng))
 		{
 			bRet = TRUE;
@@ -1275,15 +1296,15 @@ NTSTATUS CreateCDO(PDEVICE_OBJECT* DeviceObject,WCHAR* pNtDeviceName,WCHAR* pLin
 VOID DeleteCDO(PDEVICE_OBJECT DeviceObject,WCHAR* pLinkName)
 {
 	UNICODE_STRING DosDevicesLinkName;
-	RtlInitUnicodeString(&DosDevicesLinkName,pLinkName);
 	if (DeviceObject)
 	{
+		RtlInitUnicodeString(&DosDevicesLinkName,pLinkName);
 		IoDeleteSymbolicLink(&DosDevicesLinkName);
 		IoDeleteDevice(DeviceObject);
 	}
 }
 
-
+//
 NTSTATUS
 CtrlDeviceCreate (
 	IN PDEVICE_OBJECT  DeviceObject,
@@ -1338,28 +1359,117 @@ CtrlDeviceControl (
 	PIO_STACK_LOCATION IrpStack;
 	ULONG Ioctl;
 	NTSTATUS Status;
+	ULONG InPutBufferLength;
 
 	Status = STATUS_SUCCESS;
 
 	IrpStack = IoGetCurrentIrpStackLocation (Irp);
 	Ioctl = IrpStack->Parameters.DeviceIoControl.IoControlCode;
+	InPutBufferLength = IrpStack->Parameters.DeviceIoControl.InputBufferLength;
 
-	DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "TdDeviceControl: entering - ioctl code 0x%x\n", Ioctl);
+	DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "CtrlDeviceControl: entering - ioctl code 0x%x\n", Ioctl);
 
 	switch (Ioctl)
 	{
-	case TD_IOCTL_PROTECT_NAME_CALLBACK:
+	case IOCTL_SET_PROCESS_PROTECT_ONOFF:
 
-		Status = TdControlProtectName (DeviceObject, Irp);
+		DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "CtrlDeviceControl: IOCTL_SET_PROCESS_PROTECT_ONOFF\n");
+		if (InPutBufferLength<sizeof(ULONG)||Irp->AssociatedIrp.SystemBuffer==NULL)
+		{
+			Status = STATUS_INVALID_PARAMETER;
+			break;
+		}
+		gProcessProtect = *((ULONG*)Irp->AssociatedIrp.SystemBuffer);
 		break;
 
-	case TD_IOCTL_UNPROTECT_CALLBACK:
+	case IOCTL_SET_FILE_PROTECT_ONOFF:
 
-		Status = TdControlUnprotect (DeviceObject, Irp);
+		DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "CtrlDeviceControl: IOCTL_SET_FILE_PROTECT_ONOFF\n");
+		if (InPutBufferLength<sizeof(ULONG)||Irp->AssociatedIrp.SystemBuffer==NULL)
+		{
+			Status = STATUS_INVALID_PARAMETER;
+			break;
+		}
+		gFileProtect = *((ULONG*)Irp->AssociatedIrp.SystemBuffer);
 		break;
+
+	case IOCTL_SET_REG_PROTECT_ONOFF:
+
+		DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "CtrlDeviceControl: IOCTL_SET_REG_PROTECT_ONOFF\n");
+		if (InPutBufferLength<sizeof(ULONG)||Irp->AssociatedIrp.SystemBuffer==NULL)
+		{
+			Status = STATUS_INVALID_PARAMETER;
+			break;
+		}
+		gRegProtect = *((ULONG*)Irp->AssociatedIrp.SystemBuffer);
+		break;
+
+	case IOCTL_SET_PROTECT_FILE_PATH:
+		{
+			PATH_LIST* pFileList = NULL;
+			DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "CtrlDeviceControl: IOCTL_SET_PROTECT_FILE_PATH\n");
+			if (InPutBufferLength<sizeof(PATH_LIST)||Irp->AssociatedIrp.SystemBuffer==NULL)
+			{
+				Status = STATUS_INVALID_PARAMETER;
+				break;
+			}
+
+			pFileList = (PATH_LIST*)Irp->AssociatedIrp.SystemBuffer;
+			if (pFileList->PathNum==0 || pFileList->PathNum >MAX_FILE_NUM)
+			{
+				Status = STATUS_INVALID_PARAMETER;
+				break;
+			}
+
+			RtlCopyMemory(&gFilePathList,pFileList,sizeof(PATH_LIST));
+			break;
+		}
+
+
+	case IOCTL_SET_PROTECT_REG_PATH:
+		{
+			PATH_LIST* pRegList = NULL;
+			DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "CtrlDeviceControl: IOCTL_SET_PROTECT_REG_PATH\n");
+			if (InPutBufferLength<sizeof(PATH_LIST)||Irp->AssociatedIrp.SystemBuffer==NULL)
+			{
+				Status = STATUS_INVALID_PARAMETER;
+				break;
+			}
+
+			pRegList = (PATH_LIST*)Irp->AssociatedIrp.SystemBuffer;
+			if (pRegList->PathNum==0 || pRegList->PathNum >MAX_FILE_NUM)
+			{
+				Status = STATUS_INVALID_PARAMETER;
+				break;
+			}
+
+			RtlCopyMemory(&gRegPathList,pRegList,sizeof(PATH_LIST));
+			break;
+		}
+
+	case IOCTL_SET_TRUST_PID:
+		{
+			PROCESS_WHITE_LIST* pPidList = NULL;
+			DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "CtrlDeviceControl: IOCTL_SET_TRUST_PID\n");
+			if (InPutBufferLength<sizeof(PROCESS_WHITE_LIST)||Irp->AssociatedIrp.SystemBuffer==NULL)
+			{
+				Status = STATUS_INVALID_PARAMETER;
+				break;
+			}
+
+			pPidList = (PROCESS_WHITE_LIST*)Irp->AssociatedIrp.SystemBuffer;
+			if (pPidList->WhiteProcessNum==0 || pPidList->WhiteProcessNum >MAX_WHITE_PROCESS_NUM)
+			{
+				Status = STATUS_INVALID_PARAMETER;
+				break;
+			}
+
+			RtlCopyMemory(&gPidWhiteList,pPidList,sizeof(PROCESS_WHITE_LIST));
+			break;
+		}
 
 	default:
-		DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "TdDeviceControl: unrecognized ioctl code 0x%x\n", Ioctl);
+		DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "CtrlDeviceControl: unrecognized ioctl code 0x%x\n", Ioctl);
 		break;
 	}
 
@@ -1370,6 +1480,6 @@ CtrlDeviceControl (
 	Irp->IoStatus.Status = Status;
 	IoCompleteRequest (Irp, IO_NO_INCREMENT);
 
-	DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "TdDeviceControl leaving - status 0x%x\n", Status);
+	DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "CtrlDeviceControl leaving - status 0x%x\n", Status);
 	return Status;
 }
