@@ -381,7 +381,7 @@ BOOL InstallMiniFilerDriver()
 	TCHAR SystemDir[MAX_PATH]={0};
 	::GetSystemDirectory(SystemDir,MAX_PATH);
 	CString strDesDriverPath=SystemDir;
-	strDesDriverPath +=_T("\\drivers\\360cloudselfp.sys");
+	strDesDriverPath +=_T("\\drivers\\SelfProtect.sys");
 
 	CString strBinaryName = strDesDriverPath;
 
