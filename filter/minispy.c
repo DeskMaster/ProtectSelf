@@ -195,14 +195,6 @@ Return Value:
     NTSTATUS status = STATUS_SUCCESS;
 
     try {
-
-		gCmRegCookie.QuadPart = 0;
-		status = GlobalInitial();
-		if (!NT_SUCCESS( status )) 
-		{
-			leave;
-		}
-
         //
         // Initialize global data structures.
         //
@@ -226,6 +218,13 @@ Return Value:
                                          0 );
 
         SpyReadDriverParameters(RegistryPath);
+
+		gCmRegCookie.QuadPart = 0;
+		status = GlobalInitial();
+		if (!NT_SUCCESS(status))
+		{
+			leave;
+		}
 
         //
         //  Now that our global configuration is complete, register with FltMgr.
@@ -276,7 +275,6 @@ Return Value:
         //
 
         status = FltStartFiltering( MiniSpyData.Filter );
-
     } 
 	finally 
 	{
@@ -695,7 +693,7 @@ Return Value:
 
 	UNREFERENCED_PARAMETER( CompletionContext );
 
-	if (Data->RequestorMode == KernelMode || FltObjects->FileObject)
+	if (Data->RequestorMode == KernelMode || !FltObjects->FileObject)
 	{
 		return FLT_PREOP_SUCCESS_WITH_CALLBACK;
 	}
@@ -793,7 +791,7 @@ UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatu
 
 	if (NT_SUCCESS(status))
 	{
-		UNICODE_STRING* DosName = NULL;
+		UNICODE_STRING DosName = {0};
 		status = FltParseFileNameInformation(FileNameInformation);
 		if (NT_SUCCESS(status))
 		{
@@ -802,8 +800,8 @@ UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatu
 				FileNameInformation->ParentDir.Length)
 			{
 				USHORT NameLeng = FileNameInformation->Volume.Length + FileNameInformation->Name.Length + FileNameInformation->ParentDir.Length+sizeof(UNICODE_STRING);
-				ASSERT(KeAreAllApcsDisabled());
-				status = IoVolumeDeviceToDosName((PVOID)(FileNameInformation->Volume.Buffer),DosName);
+				ASSERT(!KeAreAllApcsDisabled());
+				status = IoVolumeDeviceToDosName((PVOID)(FileNameInformation->Volume.Buffer),&DosName);
 				if (NT_SUCCESS(status))
 				{
 					pUnicodeName = (UNICODE_STRING*)ExAllocatePoolWithTag(NonPagedPool,NameLeng,'EMAN');
@@ -814,14 +812,19 @@ UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatu
 						pUnicodeName->Length = 0;
 						pUnicodeName->MaximumLength = NameLeng-sizeof(UNICODE_STRING);
 
-						RtlAppendUnicodeStringToString(pUnicodeName,DosName);
+						RtlAppendUnicodeStringToString(pUnicodeName,&DosName);
 						RtlAppendUnicodeStringToString(pUnicodeName,&FileNameInformation->ParentDir);
 						RtlAppendUnicodeStringToString(pUnicodeName,&FileNameInformation->Name);
+						KdPrint(("AllocateAndGetFileName: %wZ\n",pUnicodeName));
+					}
+					else
+					{
+						KdPrint(("AllocateAndGetFileName: ExAllocatePoolWithTag faild,status=0x%x\n", status));
 					}
 				}
 				else
 				{
-					KdPrint(("AllocateAndGetFileName: ExAllocatePoolWithTag faild,status=0x%x\n",status));
+					KdPrint(("AllocateAndGetFileName: IoVolumeDeviceToDosName faild,status=0x%x\n",status));
 				}
 			}
 			else
@@ -848,7 +851,7 @@ NTSTATUS GlobalInitial()
 	RtlZeroMemory(&gFilePathList,sizeof(PATH_LIST));
 	RtlZeroMemory(&gRegPathList,sizeof(PATH_LIST));
 
-	status = CreateCDO(&CtrlDeviceObject,CTRLLINKNAME_STRING,CTRLNTDEVICE_STRING);
+	status = CreateCDO(&CtrlDeviceObject, CTRLNTDEVICE_STRING,CTRLLINKNAME_STRING);
 	if (NT_SUCCESS(status))
 	{
 		status = InitialCallBack();
@@ -1123,8 +1126,8 @@ BOOLEAN IsProtectFile(__in WCHAR* pFileName,__in ULONG FileNameLeng)
 	ULONG i = 0;
 	for (;i<gFilePathList.PathNum;i++)
 	{
-		if (FileNameLeng == gFilePathList.PathArray[i].PathLeng &&
-			FileNameLeng == RtlCompareMemory(pFileName,gFilePathList.PathArray[i].Path, FileNameLeng))
+		if (FileNameLeng >= gFilePathList.PathArray[i].PathLeng &&
+			gFilePathList.PathArray[i].PathLeng == RtlCompareMemory(pFileName,gFilePathList.PathArray[i].Path, gFilePathList.PathArray[i].PathLeng))
 		{
 			bRet = TRUE;
 			break;

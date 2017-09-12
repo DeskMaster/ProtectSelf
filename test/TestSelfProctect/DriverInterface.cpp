@@ -147,7 +147,7 @@ BOOL SetOnOFF(DWORD dwCtrlCode,BOOL bEnable)
 {
 	BOOL bRet = FALSE;
 	HANDLE hFile = OpenDevice();
-	if (hFile)
+	if (hFile == INVALID_HANDLE_VALUE)
 	{
 		return bRet;
 	}
@@ -172,7 +172,7 @@ BOOL SendDataToDriver(DWORD dwCtrlCode,PVOID InPutBuffer,DWORD dwInPutBufferLeng
 {
 	BOOL bRet = FALSE;
 	HANDLE hFile = OpenDevice();
-	if (hFile)
+	if (hFile == INVALID_HANDLE_VALUE)
 	{
 		return bRet;
 	}

@@ -211,6 +211,7 @@ void CTestSelfProctectDlg::OnBnClickedFilePath()
 		return;
 	}
 	memcpy(PathNode.Path,strFilePath_1.GetBuffer(),PathNode.PathLeng);
+	gFileVector.push_back(PathNode);
 
 	//
 	memset(&PathNode,0,sizeof(PROTECT_PATH_NODE));
@@ -223,6 +224,7 @@ void CTestSelfProctectDlg::OnBnClickedFilePath()
 		return;
 	}
 	memcpy(PathNode.Path,strFilePath_2.GetBuffer(),PathNode.PathLeng);
+	gFileVector.push_back(PathNode);
 
 	BOOL bRet = SetProctFilePath(gFileVector);
 	if (bRet)
@@ -256,6 +258,7 @@ void CTestSelfProctectDlg::OnBnClickedRegPath()
 		return;
 	}
 	memcpy(PathNode.Path,strRegPath_1.GetBuffer(),PathNode.PathLeng);
+	gRegVector.push_back(PathNode);
 
 	//
 	memset(&PathNode,0,sizeof(PROTECT_PATH_NODE));
@@ -268,6 +271,7 @@ void CTestSelfProctectDlg::OnBnClickedRegPath()
 		return;
 	}
 	memcpy(PathNode.Path,strRegPath_2.GetBuffer(),PathNode.PathLeng);
+	gRegVector.push_back(PathNode);
 
 	BOOL bRet = SetProctRegPath(gRegVector);
 	if (bRet)
