@@ -226,8 +226,8 @@ BOOL InstallMiniFilterDriver(LPCWSTR lpBinaryName)
 				if (lResult == ERROR_SUCCESS)
 				{
 					memset(DataBuffer,0,512);
-					cbDataBuffer = sizeof("443220");
-					memcpy(DataBuffer,"443220",cbDataBuffer);
+					cbDataBuffer = sizeof("320320");
+					memcpy(DataBuffer,"320320",cbDataBuffer);
 
 					lResult = RegSetValueExA(hSubKey_1,"Altitude",0,REG_SZ,DataBuffer,cbDataBuffer);
 

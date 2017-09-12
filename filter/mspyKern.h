@@ -263,6 +263,34 @@ SpyReadDriverParameters (
     __in PUNICODE_STRING RegistryPath
     );
 
+NTSTATUS
+PtInstanceSetup(
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in FLT_INSTANCE_SETUP_FLAGS Flags,
+	__in DEVICE_TYPE VolumeDeviceType,
+	__in FLT_FILESYSTEM_TYPE VolumeFilesystemType
+);
+
+NTSTATUS
+PtInstanceSetup(
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in FLT_INSTANCE_SETUP_FLAGS Flags,
+	__in DEVICE_TYPE VolumeDeviceType,
+	__in FLT_FILESYSTEM_TYPE VolumeFilesystemType
+);
+
+VOID
+PtInstanceTeardownStart(
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in FLT_INSTANCE_TEARDOWN_FLAGS Flags
+);
+
+
+VOID
+PtInstanceTeardownComplete(
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in FLT_INSTANCE_TEARDOWN_FLAGS Flags
+);
 
 //---------------------------------------------------------------------------
 //  Memory allocation routines

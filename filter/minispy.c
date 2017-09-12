@@ -693,7 +693,7 @@ Return Value:
 
 	UNREFERENCED_PARAMETER( CompletionContext );
 
-	if (Data->RequestorMode == KernelMode || !FltObjects->FileObject)
+	if (Data->RequestorMode == KernelMode)
 	{
 		return FLT_PREOP_SUCCESS_WITH_CALLBACK;
 	}
@@ -795,15 +795,13 @@ UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatu
 		status = FltParseFileNameInformation(FileNameInformation);
 		if (NT_SUCCESS(status))
 		{
-			if (FileNameInformation->Volume.Length &&
-				FileNameInformation->Name.Length &&
-				FileNameInformation->ParentDir.Length)
+			if (FileNameInformation->Name.Length )
 			{
-				USHORT NameLeng = FileNameInformation->Volume.Length + FileNameInformation->Name.Length + FileNameInformation->ParentDir.Length+sizeof(UNICODE_STRING);
-				ASSERT(!KeAreAllApcsDisabled());
-				status = IoVolumeDeviceToDosName((PVOID)(FileNameInformation->Volume.Buffer),&DosName);
-				if (NT_SUCCESS(status))
-				{
+				USHORT NameLeng = FileNameInformation->Name.Length+sizeof(UNICODE_STRING);
+				//ASSERT(!KeAreAllApcsDisabled());
+				//status = IoVolumeDeviceToDosName((PVOID)(FileNameInformation->Volume.Buffer),&DosName);
+				//if (NT_SUCCESS(status))
+				//{
 					pUnicodeName = (UNICODE_STRING*)ExAllocatePoolWithTag(NonPagedPool,NameLeng,'EMAN');
 					if (pUnicodeName)
 					{
@@ -812,20 +810,21 @@ UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatu
 						pUnicodeName->Length = 0;
 						pUnicodeName->MaximumLength = NameLeng-sizeof(UNICODE_STRING);
 
-						RtlAppendUnicodeStringToString(pUnicodeName,&DosName);
-						RtlAppendUnicodeStringToString(pUnicodeName,&FileNameInformation->ParentDir);
-						RtlAppendUnicodeStringToString(pUnicodeName,&FileNameInformation->Name);
+						//RtlAppendUnicodeStringToString(pUnicodeName,&DosName);
+						//RtlAppendUnicodeStringToString(pUnicodeName,&FileNameInformation->ParentDir);
+						//RtlAppendUnicodeStringToString(pUnicodeName,&FileNameInformation->Name);
+						RtlCopyUnicodeString(pUnicodeName, &FileNameInformation->Name);
 						KdPrint(("AllocateAndGetFileName: %wZ\n",pUnicodeName));
 					}
 					else
 					{
 						KdPrint(("AllocateAndGetFileName: ExAllocatePoolWithTag faild,status=0x%x\n", status));
 					}
-				}
-				else
-				{
-					KdPrint(("AllocateAndGetFileName: IoVolumeDeviceToDosName faild,status=0x%x\n",status));
-				}
+				//}
+				//else
+				//{
+				//	KdPrint(("AllocateAndGetFileName: IoVolumeDeviceToDosName faild,status=0x%x\n",status));
+				//}
 			}
 			else
 			{
@@ -1014,7 +1013,7 @@ RegistryCallback(
 	REG_NOTIFY_CLASS RegNotifyClass = (REG_NOTIFY_CLASS)Argument1;
 
 	ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
-	if (IsWhitePid(CurrPid) &&
+	if (IsWhitePid(CurrPid) ||
 		!gRegProtect)
 	{
 		return status;
@@ -1102,6 +1101,36 @@ VOID LoadImageNotify(
 	//KdPrint((""));
 }
 
+static int __inline Lower(int c)
+{
+	if ((c >= L'A') && (c <= L'Z'))
+	{
+		return(c + (L'a' - L'A'));
+	}
+	else
+	{
+		return(c);
+	}
+}
+
+BOOLEAN RtlStringMatch(WCHAR * pat, WCHAR * str, ULONG Leng)
+{
+	BOOLEAN bRet = TRUE;
+	register WCHAR * s;
+	register WCHAR * p;
+
+	for (s = str, p = pat; Leng > 0; ++s, ++p, Leng--)
+	{
+		if (Lower(*s) != Lower(*p))
+		{
+			bRet = FALSE;
+			break;
+		}
+	}
+
+	return bRet;
+}
+
 //
 BOOLEAN IsWhitePid(ULONG Pid)
 {
@@ -1127,7 +1156,7 @@ BOOLEAN IsProtectFile(__in WCHAR* pFileName,__in ULONG FileNameLeng)
 	for (;i<gFilePathList.PathNum;i++)
 	{
 		if (FileNameLeng >= gFilePathList.PathArray[i].PathLeng &&
-			gFilePathList.PathArray[i].PathLeng == RtlCompareMemory(pFileName,gFilePathList.PathArray[i].Path, gFilePathList.PathArray[i].PathLeng))
+			RtlStringMatch(pFileName,gFilePathList.PathArray[i].Path, FileNameLeng/2))
 		{
 			bRet = TRUE;
 			break;
@@ -1144,7 +1173,7 @@ BOOLEAN IsProtectReg(__in WCHAR* pRegName, __in ULONG FileNameLeng)
 	for (; i < gRegPathList.PathNum; i++)
 	{
 		if (FileNameLeng == gRegPathList.PathArray[i].PathLeng &&
-			FileNameLeng == RtlCompareMemory(pRegName, gRegPathList.PathArray[i].Path, FileNameLeng))
+			RtlStringMatch(pRegName, gRegPathList.PathArray[i].Path, FileNameLeng/2))
 		{
 			bRet = TRUE;
 			break;
@@ -1485,4 +1514,88 @@ CtrlDeviceControl (
 
 	DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "CtrlDeviceControl leaving - status 0x%x\n", Status);
 	return Status;
+}
+
+//void InitObjectAttributes(POBJECT_ATTRIBUTES ObjAttr, PUNICODE_STRING UniStr, LPWSTR Name)
+//// initialization of some structures for file access
+//{
+//	RtlInitUnicodeString(UniStr, Name);
+//	ObjAttr->Length = sizeof(OBJECT_ATTRIBUTES);
+//	ObjAttr->RootDirectory = 0;
+//	ObjAttr->ObjectName = UniStr;
+//	ObjAttr->Attributes = 0x240;  // OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE
+//	ObjAttr->SecurityDescriptor = NULL;
+//	ObjAttr->SecurityQualityOfService = NULL;
+//}
+////void DeviceNameToDosName(WCHAR *Buf, ULONG BufLen)
+//// "\Device\HarddiskVolume1\Some Folder\Hook.dll" -> "C:\Some Folder\Some.dll"
+//{
+//	OBJECT_ATTRIBUTES oa;
+//	UNICODE_STRING    us;
+//	IO_STATUS_BLOCK   isb;
+//	HANDLE            fh;
+//	PFILE_OBJECT      fo;
+//
+//	InitObjectAttributes(&oa, &us, Buf);
+//	if (NT_SUCCESS(ZwCreateFile(&fh, FILE_READ_DATA, &oa, &isb, NULL, 0, FILE_SHARE_READ, FILE_OPEN, 0, NULL, 0)))
+//	{
+//		if (NT_SUCCESS(ObReferenceObjectByHandle(fh, FILE_ALL_ACCESS, 0, KernelMode, &fo, 0)))
+//		{
+//			POBJECT_NAME_INFORMATION dosstr;
+//			if (NT_SUCCESS(IoQueryFileDosDeviceName(fo, &dosstr)))
+//			{
+//				if ((ULONG)dosstr->Name.Length >= BufLen * 2)
+//					dosstr->Name.Length = (USHORT)BufLen * 2 - 2;
+//				wcsncpy(Buf, dosstr->Name.Buffer, dosstr->Name.Length / 2);
+//				Buf[dosstr->Name.Length / 2] = 0;
+//
+//				ExFreePool(dosstr);
+//			}
+//			ObDereferenceObject(fo);
+//		}
+//		ZwClose(fh);
+//	}
+//}
+
+NTSTATUS
+PtInstanceSetup(
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in FLT_INSTANCE_SETUP_FLAGS Flags,
+	__in DEVICE_TYPE VolumeDeviceType,
+	__in FLT_FILESYSTEM_TYPE VolumeFilesystemType
+)
+{
+	UNREFERENCED_PARAMETER(FltObjects);
+	UNREFERENCED_PARAMETER(Flags);
+	UNREFERENCED_PARAMETER(VolumeDeviceType);
+	UNREFERENCED_PARAMETER(VolumeFilesystemType);
+
+	PAGED_CODE();
+
+	return STATUS_SUCCESS;
+}
+
+VOID
+PtInstanceTeardownStart(
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in FLT_INSTANCE_TEARDOWN_FLAGS Flags
+)
+{
+	UNREFERENCED_PARAMETER(FltObjects);
+	UNREFERENCED_PARAMETER(Flags);
+
+	PAGED_CODE();
+}
+
+
+VOID
+PtInstanceTeardownComplete(
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in FLT_INSTANCE_TEARDOWN_FLAGS Flags
+)
+{
+	UNREFERENCED_PARAMETER(FltObjects);
+	UNREFERENCED_PARAMETER(Flags);
+
+	PAGED_CODE();
 }

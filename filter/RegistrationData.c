@@ -262,15 +262,15 @@ CONST FLT_REGISTRATION FilterRegistration = {
     FLT_REGISTRATION_VERSION,               //  Version
     0,                                      //  Flags
 
-    Contexts,                               //  Context
+    NULL,                               //  Context
     Callbacks,                              //  Operation callbacks
 
     SpyFilterUnload,                        //  FilterUnload
 
-    NULL,                                   //  InstanceSetup
+	PtInstanceSetup,                                   //  InstanceSetup
     SpyQueryTeardown,                       //  InstanceQueryTeardown
-    NULL,                                   //  InstanceTeardownStart
-    NULL,                                   //  InstanceTeardownComplete
+	PtInstanceTeardownStart,                                   //  InstanceTeardownStart
+	PtInstanceTeardownComplete,                                   //  InstanceTeardownComplete
 
     NULL,                                   //  GenerateFileName
     NULL,                                   //  GenerateDestinationFileName
