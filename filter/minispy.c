@@ -799,33 +799,21 @@ UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatu
 			if (FileNameInformation->Name.Length )
 			{
 				USHORT NameLeng = FileNameInformation->Name.Length+sizeof(UNICODE_STRING);
-				//ASSERT(!KeAreAllApcsDisabled());
-				//status = IoVolumeDeviceToDosName((PVOID)(FileNameInformation->Volume.Buffer),&DosName);
-				//if (NT_SUCCESS(status))
-				//{
-					pUnicodeName = (UNICODE_STRING*)ExAllocatePoolWithTag(NonPagedPool,NameLeng,'EMAN');
-					if (pUnicodeName)
-					{
-						RtlZeroMemory(pUnicodeName,NameLeng);
-						pUnicodeName->Buffer = (WCHAR*)(pUnicodeName+1);
-						pUnicodeName->Length = 0;
-						pUnicodeName->MaximumLength = NameLeng-sizeof(UNICODE_STRING);
+				pUnicodeName = (UNICODE_STRING*)ExAllocatePoolWithTag(NonPagedPool,NameLeng,'EMAN');
+				if (pUnicodeName)
+				{
+					RtlZeroMemory(pUnicodeName,NameLeng);
+					pUnicodeName->Buffer = (WCHAR*)(pUnicodeName+1);
+					pUnicodeName->Length = 0;
+					pUnicodeName->MaximumLength = NameLeng-sizeof(UNICODE_STRING);
 
-						//RtlAppendUnicodeStringToString(pUnicodeName,&DosName);
-						//RtlAppendUnicodeStringToString(pUnicodeName,&FileNameInformation->ParentDir);
-						//RtlAppendUnicodeStringToString(pUnicodeName,&FileNameInformation->Name);
-						RtlCopyUnicodeString(pUnicodeName, &FileNameInformation->Name);
-						KdPrint(("AllocateAndGetFileName: %wZ\n",pUnicodeName));
-					}
-					else
-					{
-						KdPrint(("AllocateAndGetFileName: ExAllocatePoolWithTag faild,status=0x%x\n", status));
-					}
-				//}
-				//else
-				//{
-				//	KdPrint(("AllocateAndGetFileName: IoVolumeDeviceToDosName faild,status=0x%x\n",status));
-				//}
+					RtlCopyUnicodeString(pUnicodeName, &FileNameInformation->Name);
+					KdPrint(("AllocateAndGetFileName: %wZ\n",pUnicodeName));
+				}
+				else
+				{
+					KdPrint(("AllocateAndGetFileName: ExAllocatePoolWithTag faild,status=0x%x\n", status));
+				}
 			}
 			else
 			{
@@ -882,7 +870,7 @@ NTSTATUS InitialCallBack()
 	ObOperReg.PostOperation = NULL;
 
 	ObCallBackReg.OperationRegistration = &ObOperReg;
-	
+
 	status = ObRegisterCallbacks(&ObCallBackReg,&gRegistrationHandle);
 	if (!NT_SUCCESS(status))
 	{
@@ -897,12 +885,12 @@ NTSTATUS InitialCallBack()
 		return status;
 	}
 
-	//status = PsSetLoadImageNotifyRoutine(LoadImageNotify);
-	//if (!NT_SUCCESS(status))
-	//{
-	//	KdPrint(("InitialCallBack: PsSetLoadImageNotifyRoutine faild status=0x%x\n", status));
-	//	return status;
-	//}
+	status = PsSetLoadImageNotifyRoutine(LoadImageNotify);
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("InitialCallBack: PsSetLoadImageNotifyRoutine faild status=0x%x\n", status));
+		return status;
+	}
 
 	return status;
 }
@@ -922,17 +910,17 @@ NTSTATUS UnInitialCallBack()
 		KdPrint(("UnInitialCallBack: CmUnRegisterCallback faild status=0x%x\n", status));
 	}
 
-	//status = PsRemoveLoadImageNotifyRoutine(LoadImageNotify);
-	//if (!NT_SUCCESS(status))
-	//{
-	//	KdPrint(("UnInitialCallBack: PsRemoveLoadImageNotifyRoutine faild status=0x%x\n", status));
-	//}
+	status = PsRemoveLoadImageNotifyRoutine(LoadImageNotify);
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("UnInitialCallBack: PsRemoveLoadImageNotifyRoutine faild status=0x%x\n", status));
+	}
 
 	return status;
 }
 
 OB_PREOP_CALLBACK_STATUS 
-ProcessObjectPreCallback(
+	ProcessObjectPreCallback(
 	__in PVOID  RegistrationContext,
 	__in POB_PRE_OPERATION_INFORMATION  OperationInformation
 	)
@@ -1106,7 +1094,23 @@ VOID LoadImageNotify(
 	__in HANDLE ProcessId,                // pid into which image is being mapped
 	__in PIMAGE_INFO ImageInfo)
 {
-	//KdPrint((""));
+	do 
+	{
+		if (0==ProcessId)
+		{
+			ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
+			KdPrint(("LoadImageNotify:    \n"));
+			if (IsWhitePid(CurrPid))
+			{
+				break;
+			}
+				
+			if(FullImageName!=NULL && MmIsAddressValid(FullImageName))
+			{
+				KdPrint(("LoadImageNotify: Pid(%d),%wZ\n",CurrPid,FullImageName));
+			}
+		}
+	}while(FALSE);
 }
 
 static int __inline Lower(int c)
@@ -1275,10 +1279,15 @@ BOOLEAN PreSetInforProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb
 					lpRenameInfor->FileName && 
 					lpRenameInfor->FileNameLength)
 				{
-					KdPrint(("PreSetInforProcess: Rename %S\n",lpRenameInfor->FileName));
-					if (bRet = IsProtectFile(lpRenameInfor->FileName, lpRenameInfor->FileNameLength/2))
+					KdPrint(("PreSetInforProcess: Rename (%S),leng=%d\n",lpRenameInfor->FileName,lpRenameInfor->FileNameLength));
+					if (bRet = IsProtectFile(lpRenameInfor->FileName, lpRenameInfor->FileNameLength))
 					{
+						KdPrint(("PreSetInforProcess: Rename forbid\n"));
 						break;
+					}
+					else
+					{
+						KdPrint(("PreSetInforProcess: Rename do not protect!!!!\n"));
 					}
 				}
 			}
