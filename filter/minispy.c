@@ -712,6 +712,7 @@ Return Value:
 
 	if(bForbid)
 	{
+		KdPrint(("SpyPreOperationCallback: forbid pre oper\n"));
 		Data->IoStatus.Information = 0;
 		Data->IoStatus.Status = STATUS_ACCESS_DENIED;
 		return FLT_PREOP_COMPLETE;
@@ -896,12 +897,12 @@ NTSTATUS InitialCallBack()
 		return status;
 	}
 
-	status = PsSetLoadImageNotifyRoutine(LoadImageNotify);
-	if (!NT_SUCCESS(status))
-	{
-		KdPrint(("InitialCallBack: PsSetLoadImageNotifyRoutine faild status=0x%x\n", status));
-		return status;
-	}
+	//status = PsSetLoadImageNotifyRoutine(LoadImageNotify);
+	//if (!NT_SUCCESS(status))
+	//{
+	//	KdPrint(("InitialCallBack: PsSetLoadImageNotifyRoutine faild status=0x%x\n", status));
+	//	return status;
+	//}
 
 	return status;
 }
@@ -921,11 +922,11 @@ NTSTATUS UnInitialCallBack()
 		KdPrint(("UnInitialCallBack: CmUnRegisterCallback faild status=0x%x\n", status));
 	}
 
-	status = PsRemoveLoadImageNotifyRoutine(LoadImageNotify);
-	if (!NT_SUCCESS(status))
-	{
-		KdPrint(("UnInitialCallBack: PsRemoveLoadImageNotifyRoutine faild status=0x%x\n", status));
-	}
+	//status = PsRemoveLoadImageNotifyRoutine(LoadImageNotify);
+	//if (!NT_SUCCESS(status))
+	//{
+	//	KdPrint(("UnInitialCallBack: PsRemoveLoadImageNotifyRoutine faild status=0x%x\n", status));
+	//}
 
 	return status;
 }
@@ -1030,6 +1031,7 @@ RegistryCallback(
 			{
 				if (IsProtectReg(pRegName->Buffer,pRegName->Length))
 				{
+					KdPrint(("RegistryCallback: RegNtPreDeleteKey forbid(%wZ)\n",pRegName));
 					status = STATUS_ACCESS_DENIED;
 				}
 				KdPrint(("RegistryCallback: RegNtPreDeleteKey (%wZ)\n",pRegName));
@@ -1043,11 +1045,13 @@ RegistryCallback(
 				pDeleteValueKeyInfo->Object &&
 				(pRegName = GetRegFullPath(pDeleteValueKeyInfo->Object)))
 			{
-				KdPrint(("RegistryCallback: RegNtDeleteValueKey (%wZ)\n",pRegName));
+				
 				if (IsProtectReg(pRegName->Buffer, pRegName->Length))
 				{
+					KdPrint(("RegistryCallback: RegNtDeleteValueKey forbid(%wZ)\n",pRegName));
 					status = STATUS_ACCESS_DENIED;
 				}
+				KdPrint(("RegistryCallback: RegNtDeleteValueKey (%wZ)\n",pRegName));
 			}
 			break;
 		}
@@ -1058,11 +1062,13 @@ RegistryCallback(
 				pSetValueKeyInfo->Object &&
 				(pRegName = GetRegFullPath(pSetValueKeyInfo->Object)))
 			{
-				KdPrint(("RegistryCallback: RegNtSetValueKey (%wZ)\n",pRegName));
+				
 				if (IsProtectReg(pRegName->Buffer, pRegName->Length))
 				{
+					KdPrint(("RegistryCallback: RegNtSetValueKey forbid(%wZ)\n",pRegName));
 					status = STATUS_ACCESS_DENIED;
 				}
+				KdPrint(("RegistryCallback: RegNtSetValueKey (%wZ)\n",pRegName));
 			}
 			break;
 		}
@@ -1073,11 +1079,13 @@ RegistryCallback(
 				pRenameKeyInfo->Object &&
 				(pRegName = GetRegFullPath(pRenameKeyInfo->Object)))
 			{
-				KdPrint(("RegistryCallback: RegNtRenameKey (%wZ)\n",pRegName));
+				
 				if (IsProtectReg(pRegName->Buffer, pRegName->Length))
 				{
+					KdPrint(("RegistryCallback: RegNtRenameKey forbid(%wZ)\n",pRegName));
 					status = STATUS_ACCESS_DENIED;
 				}
+				KdPrint(("RegistryCallback: RegNtRenameKey (%wZ)\n",pRegName));
 			}
 			break;
 		}
@@ -1156,7 +1164,7 @@ BOOLEAN IsProtectFile(__in WCHAR* pFileName,__in ULONG FileNameLeng)
 	for (;i<gFilePathList.PathNum;i++)
 	{
 		if (FileNameLeng >= gFilePathList.PathArray[i].PathLeng &&
-			RtlStringMatch(pFileName,gFilePathList.PathArray[i].Path, FileNameLeng/2))
+			RtlStringMatch(pFileName,gFilePathList.PathArray[i].Path, gFilePathList.PathArray[i].PathLeng/2))
 		{
 			bRet = TRUE;
 			break;
@@ -1172,8 +1180,8 @@ BOOLEAN IsProtectReg(__in WCHAR* pRegName, __in ULONG FileNameLeng)
 	ULONG i = 0;
 	for (; i < gRegPathList.PathNum; i++)
 	{
-		if (FileNameLeng == gRegPathList.PathArray[i].PathLeng &&
-			RtlStringMatch(pRegName, gRegPathList.PathArray[i].Path, FileNameLeng/2))
+		if (FileNameLeng >= gRegPathList.PathArray[i].PathLeng &&
+			RtlStringMatch(pRegName, gRegPathList.PathArray[i].Path, gRegPathList.PathArray[i].PathLeng/2))
 		{
 			bRet = TRUE;
 			break;
@@ -1267,7 +1275,8 @@ BOOLEAN PreSetInforProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb
 					lpRenameInfor->FileName && 
 					lpRenameInfor->FileNameLength)
 				{
-					if (bRet = IsProtectFile(lpRenameInfor->FileName, lpRenameInfor->FileNameLength))
+					KdPrint(("PreSetInforProcess: Rename %S\n",lpRenameInfor->FileName));
+					if (bRet = IsProtectFile(lpRenameInfor->FileName, lpRenameInfor->FileNameLength/2))
 					{
 						break;
 					}

@@ -249,7 +249,9 @@ BOOL InstallMiniFilterDriver(LPCWSTR lpBinaryName)
 	}
 	else
 	{
-		OutputDebugString(_T("InstallMiniFilterDriver: Minifilter install fail\n"));
+		CString strdbg;
+		strdbg.Format(_T("InstallMiniFilterDriver: InstallService faild,errorcode=%d,(%s)\n",GetLastError(),lpBinaryName));
+		OutputDebugString(strdbg);
 	}
 
 	return bRet;
@@ -269,13 +271,16 @@ BOOL InstallService(__in LPCWSTR lpServiceName,
 
 	if(NULL == lpServiceName || NULL == lpBinaryPathName)
 	{
+		OutputDebugString(_T("InstallService: NULL == lpServiceName || NULL == lpBinaryPathName\n"));
 		return bRet;
 	}
 
 	schSCManager = OpenSCManagerW(NULL,NULL,SC_MANAGER_ALL_ACCESS);
 	if (NULL == schSCManager)
 	{
-		dwErrorCode = ::GetLastError();
+		CString strdbg;
+		strdbg.Format(_T("InstallService: OpenSCManagerW faild,ErrorCode=%d\n",::GetLastError()));
+		OutputDebugString(strdbg);
 		return bRet;
 	}
 
