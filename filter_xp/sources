@@ -1,7 +1,7 @@
 TARGETNAME=SelfProtect
 TARGETTYPE=DRIVER
 DRIVERTYPE=FS
-#LINKER_FLAGS=/map
+LINKER_FLAGS=/map
 #LINKER_FLAGS=$(LINKER_FLAGS) /INTEGRITYCHECK
 
 
@@ -15,5 +15,6 @@ C_DEFINES=$(C_DEFINES) -D_WIN2K_COMPAT_SLIST_USAGE
 SOURCES=minispy.c   \
         mspyLib.c   \
         RegistrationData.c \
+		ssdt.c		\
         minispy.rc
 

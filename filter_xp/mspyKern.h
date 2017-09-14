@@ -385,5 +385,72 @@ extern PROCESS_WHITE_LIST gPidWhiteList;
 extern PATH_LIST gFilePathList;
 extern PATH_LIST gRegPathList;
 
+void HookSSDTTable();
+void UnHookSSDTTable();
+
+NTSTATUS InitialCallBack();
+
+NTSTATUS UnInitialCallBack();
+
+NTSTATUS GlobalInitial();
+
+VOID GlobalUnInitial();
+
+OB_PREOP_CALLBACK_STATUS
+ProcessObjectPreCallback(
+	__in PVOID  RegistrationContext,
+	__in POB_PRE_OPERATION_INFORMATION  OperationInformation
+);
+
+NTSTATUS
+RegistryCallback(
+	__in PVOID  CallbackContext,
+	__in_opt PVOID  Argument1,
+	__in_opt PVOID  Argument2
+);
+
+VOID LoadImageNotify(
+	__in PUNICODE_STRING FullImageName,
+	__in HANDLE ProcessId,                // pid into which image is being mapped
+	__in PIMAGE_INFO ImageInfo
+);
+
+UNICODE_STRING*
+AllocateAndGetFileName(
+	__in PFLT_CALLBACK_DATA Data,
+	__in NTSTATUS* pStatus);
+
+BOOLEAN
+PreCreateProcess(PFLT_CALLBACK_DATA Data, PFLT_IO_PARAMETER_BLOCK pIopb);
+
+BOOLEAN
+PreSetInforProcess(PFLT_CALLBACK_DATA Data, PFLT_IO_PARAMETER_BLOCK pIopb);
+
+BOOLEAN
+IsWhitePid(ULONG Pid);
+
+BOOLEAN
+IsProtectFile(__in WCHAR* pFileName, __in ULONG FileNameLeng);
+
+BOOLEAN
+IsProtectReg(__in WCHAR* pRegName, __in ULONG FileNameLeng);
+
+UNICODE_STRING*
+GetRegFullPath(__in PVOID pObject);
+
+NTSTATUS
+CreateCDO(PDEVICE_OBJECT* DeviceObject, WCHAR* pNtDeviceName, WCHAR* pLinkName);
+
+VOID
+DeleteCDO(PDEVICE_OBJECT DeviceObject, WCHAR* pLinkName);
+
+__drv_dispatchType(IRP_MJ_CREATE)
+DRIVER_DISPATCH CtrlDeviceCreate;
+__drv_dispatchType(IRP_MJ_CLOSE)
+DRIVER_DISPATCH CtrlDeviceClose;
+__drv_dispatchType(IRP_MJ_CLEANUP)
+DRIVER_DISPATCH CtrlDeviceCleanup;
+__drv_dispatchType(IRP_MJ_DEVICE_CONTROL)
+DRIVER_DISPATCH CtrlDeviceControl;
 #endif  //__MSPYKERN_H__
 

@@ -390,9 +390,9 @@ BOOL InstallMiniFilerDriver()
 	CString strBinaryName = strDesDriverPath;
 
 #ifdef _AMD64_
-	CString strDriverName = _T("SelfProtect_x64.sys");
+	CString strDriverName = _T("\\SelfProtect_x64.sys");
 #else
-	CString strDriverName = _T("SelfProtect.sys");
+	CString strDriverName = _T("\\SelfProtect.sys");
 #endif
 
 	TCHAR CurrentDir[MAX_PATH]={0};
@@ -402,7 +402,13 @@ BOOL InstallMiniFilerDriver()
 	OutputDebugString(strSrcDriverPath);
 	OutputDebugString(_T("\n"));
 	OutputDebugString(strDesDriverPath);
-	::CopyFile(strSrcDriverPath.GetBuffer(),strDesDriverPath.GetBuffer(),FALSE);
+	bRet = ::CopyFile(strSrcDriverPath.GetBuffer(),strDesDriverPath.GetBuffer(),FALSE);
+	if (!bRet)
+	{
+		CString strdbg;
+		strdbg.Format(_T("InstallVsecDriver: driver copy falid,ErrorCode=%d\n",GetLastError()));
+		OutputDebugString(strdbg);
+	}
 
 	bRet = InstallMiniFilterDriver(strBinaryName.GetBuffer());
 	if (bRet)
