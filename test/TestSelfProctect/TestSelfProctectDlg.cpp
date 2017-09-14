@@ -244,8 +244,8 @@ void CTestSelfProctectDlg::OnBnClickedRegPath()
 	gRegVector.clear();
 	CString strRegPath_1;
 	CString strRegPath_2;
-	GetDlgItem(FILE_PATH1)->GetWindowText(strRegPath_1);
-	GetDlgItem(FILE_PATH2)->GetWindowText(strRegPath_2);
+	GetDlgItem(REG_PATH1)->GetWindowText(strRegPath_1);
+	GetDlgItem(REG_PATH2)->GetWindowText(strRegPath_2);
 	PROTECT_PATH_NODE PathNode;
 	//
 	memset(&PathNode,0,sizeof(PROTECT_PATH_NODE));

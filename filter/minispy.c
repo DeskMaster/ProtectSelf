@@ -850,7 +850,7 @@ NTSTATUS GlobalInitial()
 
 VOID GlobalUnInitial()
 {
-	DeleteCDO(CtrlDeviceObject,CTRLNTDEVICE_STRING);
+	DeleteCDO(CtrlDeviceObject,CTRLLINKNAME_STRING);
 	UnInitialCallBack();
 }
 
