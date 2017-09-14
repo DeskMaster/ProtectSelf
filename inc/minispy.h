@@ -254,6 +254,7 @@ typedef struct _COMMAND_MESSAGE {
 #define MAX_WHITE_PROCESS_NUM	20
 #define MAX_PATH_LENGTH			512
 
+#pragma pack(push, 1)
 //White Pid = Protect Pid
 typedef struct _PROCESS_WHITE_LIST
 {
@@ -275,7 +276,7 @@ typedef struct _PATH_LIST
 	ULONG PathNum;
 	PROTECT_PATH_NODE PathArray[MAX_FILE_NUM];
 }PATH_LIST;
-
+#pragma pack(pop)
 
 #define IOCTL_SET_TRUST_PID					CTL_CODE (FILE_DEVICE_UNKNOWN, (0x800 + 0x099), METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_SET_PROTECT_FILE_PATH			CTL_CODE (FILE_DEVICE_UNKNOWN, (0x800 + 0x09A), METHOD_BUFFERED, FILE_ANY_ACCESS)
