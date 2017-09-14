@@ -5,6 +5,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ProtectSelf", "ProtectSelf.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TestSelfProctect", "..\..\test\TestSelfProctect\TestSelfProctect.vcxproj", "{6699C496-F941-44D8-820E-AC86CD194903}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ProtectSelfXP", "..\ProtectSelfXP\ProtectSelfXP.vcxproj", "{0D29D313-E725-477D-887C-C6B504A3B4B0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -29,6 +31,12 @@ Global
 		{6699C496-F941-44D8-820E-AC86CD194903}.Release|Win32.Build.0 = Release|Win32
 		{6699C496-F941-44D8-820E-AC86CD194903}.Release|x64.ActiveCfg = Release|x64
 		{6699C496-F941-44D8-820E-AC86CD194903}.Release|x64.Build.0 = Release|x64
+		{0D29D313-E725-477D-887C-C6B504A3B4B0}.Debug|Win32.ActiveCfg = Debug|Win32
+		{0D29D313-E725-477D-887C-C6B504A3B4B0}.Debug|Win32.Build.0 = Debug|Win32
+		{0D29D313-E725-477D-887C-C6B504A3B4B0}.Debug|x64.ActiveCfg = Debug|Win32
+		{0D29D313-E725-477D-887C-C6B504A3B4B0}.Release|Win32.ActiveCfg = Release|Win32
+		{0D29D313-E725-477D-887C-C6B504A3B4B0}.Release|Win32.Build.0 = Release|Win32
+		{0D29D313-E725-477D-887C-C6B504A3B4B0}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
