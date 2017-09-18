@@ -30,5 +30,8 @@ BOOL InstallService(__in LPCWSTR lpServiceName,
 	__in LPCWSTR lpBinaryPathName,
 	__in LPCWSTR lpDependencies,
 	__in LPCWSTR lpLoadOrderGroup);
+BOOL IsVistaAndLater();
 BOOL StartFsFilterService(IN LPCTSTR lpServiceName);
 BOOL UnInstallService(IN LPCTSTR lpServiceName);
+BOOL InstallMiniFilerDriver();
+BOOL UnInstallMiniFilerDriver();

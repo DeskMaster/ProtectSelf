@@ -374,55 +374,6 @@ void CTestSelfProctectDlg::OnBnClickedRegProtectOff()
 	}
 }
 
-BOOL UnInstallMiniFilerDriver()
-{
-	return UnInstallService(CloudSelfpDriverServiceName);
-}
-
-BOOL InstallMiniFilerDriver()
-{
-	BOOL bRet = FALSE;
-	TCHAR SystemDir[MAX_PATH]={0};
-	::GetSystemDirectory(SystemDir,MAX_PATH);
-	CString strDesDriverPath=SystemDir;
-	strDesDriverPath +=_T("\\drivers\\SelfProtect.sys");
-
-	CString strBinaryName = strDesDriverPath;
-
-#ifdef _AMD64_
-	CString strDriverName = _T("\\SelfProtect_x64.sys");
-#else
-	CString strDriverName = _T("\\SelfProtect.sys");
-#endif
-
-	TCHAR CurrentDir[MAX_PATH]={0};
-	::GetCurrentDirectory(MAX_PATH,CurrentDir);
-	CString strSrcDriverPath =CurrentDir;
-	strSrcDriverPath += strDriverName;
-	OutputDebugString(strSrcDriverPath);
-	OutputDebugString(_T("\n"));
-	OutputDebugString(strDesDriverPath);
-	bRet = ::CopyFile(strSrcDriverPath.GetBuffer(),strDesDriverPath.GetBuffer(),FALSE);
-	if (!bRet)
-	{
-		CString strdbg;
-		strdbg.Format(_T("InstallVsecDriver: driver copy falid,ErrorCode=%d\n",GetLastError()));
-		OutputDebugString(strdbg);
-	}
-
-	bRet = InstallMiniFilterDriver(strBinaryName.GetBuffer());
-	if (bRet)
-	{
-		OutputDebugString(_T("InstallVsecDriver: install vsec driver sucess!!\n"));
-	}
-	else
-	{
-		OutputDebugString(_T("InstallVsecDriver: install vsec driver faild!!!!!\n"));
-	}
-
-	return bRet;
-}
-
 void CTestSelfProctectDlg::OnBnClickedInstallDriver()
 {
 	// TODO: Add your control notification handler code here

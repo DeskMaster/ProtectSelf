@@ -5,6 +5,33 @@
 
 #pragma comment(lib,"Advapi32.lib")
 
+BOOL IsVistaAndLater()
+{
+	BOOL bRet = FALSE;
+	OSVERSIONINFO osvi;
+	ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
+	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+	GetVersionEx(&osvi);
+	if (osvi.dwMajorVersion >= 6)
+	{
+		bRet = TRUE;
+	}
+
+	return bRet;
+}
+
+CString GetDllPath()
+{
+	TCHAR	szBuff[MAX_PATH] = {0};  
+	HMODULE hModuleInstance = _AtlBaseModule.GetModuleInstance();  
+	GetModuleFileName(hModuleInstance,szBuff, MAX_PATH);  
+	CString strTmp = szBuff;
+	CString strDllPath;
+	strDllPath = strTmp.Mid(0, strTmp.ReverseFind('\\'));
+
+	return strDllPath;
+}
+
 BOOL EnablePidProctect()
 {
 	BOOL bRet = SetOnOFF(IOCTL_SET_PROCESS_PROTECT_ONOFF,TRUE);
@@ -430,4 +457,61 @@ BOOL UnInstallService(IN LPCTSTR lpServiceName)
 	}
 
 	return bRet;
+}
+
+BOOL InstallMiniFilerDriver()
+{
+	BOOL bRet = FALSE;
+	BOOL bVistaAndLater = IsVistaAndLater();
+	TCHAR SystemDir[MAX_PATH]={0};
+	::GetSystemDirectory(SystemDir,MAX_PATH);
+	CString strDesDriverPath=SystemDir;
+	strDesDriverPath +=_T("\\drivers\\SelfProtect.sys");
+
+	CString strBinaryName = strDesDriverPath;
+	CString strDriverName;
+
+#ifdef _AMD64_
+	strDriverName = _T("\\SelfProtect_x64.sys");
+#else
+	if (bVistaAndLater)
+	{
+		strDriverName = _T("\\SelfProtect_x86.sys");
+	}
+	else
+	{
+		strDriverName = _T("\\SelfProtect_xp_x86.sys");
+	}
+
+#endif
+
+	CString strSrcDriverPath = GetDllPath();
+	strSrcDriverPath += strDriverName;
+	OutputDebugString(strSrcDriverPath);
+	OutputDebugString(_T("\n"));
+	OutputDebugString(strDesDriverPath);
+	bRet = ::CopyFile(strSrcDriverPath.GetBuffer(),strDesDriverPath.GetBuffer(),FALSE);
+	if (!bRet)
+	{
+		CString strdbg;
+		strdbg.Format(_T("InstallVsecDriver: driver copy falid,ErrorCode=%d\n",GetLastError()));
+		OutputDebugString(strdbg);
+	}
+
+	bRet = InstallMiniFilterDriver(strBinaryName.GetBuffer());
+	if (bRet)
+	{
+		OutputDebugString(_T("InstallVsecDriver: install vsec driver sucess!!\n"));
+	}
+	else
+	{
+		OutputDebugString(_T("InstallVsecDriver: install vsec driver faild!!!!!\n"));
+	}
+
+	return bRet;
+}
+
+BOOL UnInstallMiniFilerDriver()
+{
+	return UnInstallService(CloudSelfpDriverServiceName);
 }
