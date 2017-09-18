@@ -905,22 +905,22 @@ RegistryCallback(
 
 	switch(RegNotifyClass)
 	{
-	case RegNtPreCreateKey:
-		{
-			REG_PRE_CREATE_KEY_INFORMATION* pRegPreCreateKey = (REG_PRE_CREATE_KEY_INFORMATION*)Argument2;
-			if (pRegPreCreateKey &&
-				pRegPreCreateKey->CompleteName)
-			{
-				if (IsProtectReg(pRegPreCreateKey->CompleteName->Buffer,pRegPreCreateKey->CompleteName->Length))
-				{
-					KdPrint(("RegistryCallback: RegNtPreCreateKey forbid(%wZ)\n",pRegPreCreateKey->CompleteName));
-					status = STATUS_ACCESS_DENIED;
-				}
+	//case RegNtPreCreateKey:
+	//	{
+	//		REG_PRE_CREATE_KEY_INFORMATION* pRegPreCreateKey = (REG_PRE_CREATE_KEY_INFORMATION*)Argument2;
+	//		if (pRegPreCreateKey &&
+	//			pRegPreCreateKey->CompleteName)
+	//		{
+	//			if (IsProtectReg(pRegPreCreateKey->CompleteName->Buffer,pRegPreCreateKey->CompleteName->Length))
+	//			{
+	//				KdPrint(("RegistryCallback: RegNtPreCreateKey forbid(%wZ)\n",pRegPreCreateKey->CompleteName));
+	//				status = STATUS_ACCESS_DENIED;
+	//			}
 
-				KdPrint(("RegistryCallback: RegNtPreCreateKey (%wZ)\n",pRegPreCreateKey->CompleteName));
-			}
-		}
-		break;
+	//			KdPrint(("RegistryCallback: RegNtPreCreateKey (%wZ)\n",pRegPreCreateKey->CompleteName));
+	//		}
+	//	}
+	//	break;
 	case RegNtPreDeleteKey:
 		{
 			REG_DELETE_KEY_INFORMATION* pRegDeleteKeyInfor = (REG_DELETE_KEY_INFORMATION*)Argument2;
