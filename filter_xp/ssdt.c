@@ -76,7 +76,8 @@ NewZwOpenProcess(
 	//*(ULONG *)cid1
 	ULONG dwMask = (PROCESS_SUSPEND_RESUME | PROCESS_TERMINATE);
 	ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
-	if (NULL != cid1 &&
+	if (gProcessProtect &&
+		NULL != cid1 &&
 		(CurrPid != HandleToUlong(cid1)))
 	{
 		if (IsWhitePid(HandleToUlong(cid1))&&

@@ -452,5 +452,7 @@ __drv_dispatchType(IRP_MJ_CLEANUP)
 DRIVER_DISPATCH CtrlDeviceCleanup;
 __drv_dispatchType(IRP_MJ_DEVICE_CONTROL)
 DRIVER_DISPATCH CtrlDeviceControl;
+
+extern ULONG gProcessProtect;
 #endif  //__MSPYKERN_H__
 
