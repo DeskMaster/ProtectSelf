@@ -48,20 +48,24 @@ NewZwTerminateProcess(
 	IN NTSTATUS ExitStatus
 )
 {
-	ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
-	PEPROCESS process_to_kill;
-	NTSTATUS status = ObReferenceObjectByHandle(ProcessHandle, GENERIC_READ, *PsProcessType, KernelMode, &process_to_kill, 0);
-	if (NT_SUCCESS(status))
+	if (gProcessProtect)
 	{
-		ULONG TargetPid = HandleToUlong(PsGetProcessId(process_to_kill));
-		ObDereferenceObject(process_to_kill);
-		if ((TargetPid != CurrPid) &&
-			IsWhitePid(TargetPid) && 
-			!IsWhitePid(CurrPid))
+		ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
+		PEPROCESS process_to_kill;
+		NTSTATUS status = ObReferenceObjectByHandle(ProcessHandle, GENERIC_READ, *PsProcessType, KernelMode, &process_to_kill, 0);
+		if (NT_SUCCESS(status))
 		{
-			return STATUS_ACCESS_DENIED;
+			ULONG TargetPid = HandleToUlong(PsGetProcessId(process_to_kill));
+			ObDereferenceObject(process_to_kill);
+			if ((TargetPid != CurrPid) &&
+				IsWhitePid(TargetPid) && 
+				!IsWhitePid(CurrPid))
+			{
+				return STATUS_ACCESS_DENIED;
+			}
 		}
 	}
+
 	return  Old_ZwTerminateProcess(ProcessHandle, ExitStatus);
 }
 NTSTATUS

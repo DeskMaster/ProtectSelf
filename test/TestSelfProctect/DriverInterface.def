@@ -1,0 +1,17 @@
+; EntNetFilterDll.def : Declares the module parameters for the DLL.
+
+LIBRARY      "DriverInterface.dll"
+
+EXPORTS
+    ; Explicit exports can go here
+	EnablePidProctect			@1
+	DisablePidProctect			@2
+	EnableFileProctect			@3	
+	DisableFileProctect			@4
+	EnableRegProctect			@5
+	DisableRegProctect			@6
+	SetProctFilePath			@7
+	SetProctRegPath				@8
+	SetTrustPid					@9
+	InstallMiniFilerDriver		@10
+	UnInstallMiniFilerDriver	@11
