@@ -166,10 +166,80 @@ HCURSOR CTestSelfProctectDlg::OnQueryDragIcon()
 
 
 #include "DriverInterface.h"
+#include <vector>
+
+typedef std::vector <PROTECT_PATH_NODE>	Path_Node_Vector;
+typedef std::vector <DWORD>	Trust_Pid_Vector;
+
 Trust_Pid_Vector gPidVector;
 Path_Node_Vector gFileVector;
 Path_Node_Vector gRegVector;
 
+BOOL SetProctFilePath(Path_Node_Vector& FilePathVector)
+{
+	BOOL bRet = FALSE;
+	size_t Counts = FilePathVector.size();
+	if (Counts==0)
+	{
+		return bRet;
+	}
+
+	PATH_LIST FilePathList;
+	memset(&FilePathList,0,sizeof(PATH_LIST));
+	FilePathList.PathNum = Counts;
+	for (int i=0;i<Counts;i++)
+	{
+		memcpy(&FilePathList.PathArray[i],&FilePathVector[i],sizeof(PROTECT_PATH_NODE));
+	}
+
+	bRet = SetProctFilePath(&FilePathList,sizeof(PATH_LIST));
+
+	return bRet;
+}
+
+BOOL SetProctRegPath(Path_Node_Vector& RegPathVector)
+{
+	BOOL bRet = FALSE;
+	size_t Counts = RegPathVector.size();
+	if (Counts==0)
+	{
+		return bRet;
+	}
+
+	PATH_LIST RegPathList;
+	memset(&RegPathList,0,sizeof(PATH_LIST));
+	RegPathList.PathNum = Counts;
+	for (int i=0;i<Counts;i++)
+	{
+		memcpy(&RegPathList.PathArray[i],&RegPathVector[i],sizeof(PROTECT_PATH_NODE));
+	}
+
+	bRet = SetProctRegPath(&RegPathList,sizeof(PATH_LIST));
+
+	return bRet;
+}
+
+BOOL SetTrustPid(Trust_Pid_Vector& TrustPidVector)
+{
+	BOOL bRet = FALSE;
+	size_t Counts = TrustPidVector.size();
+	if (Counts==0)
+	{
+		return bRet;
+	}
+
+	PROCESS_WHITE_LIST TrustPidList;
+	memset(&TrustPidList,0,sizeof(PROCESS_WHITE_LIST));
+	TrustPidList.WhiteProcessNum = Counts;
+	for (int i=0;i<Counts;i++)
+	{
+		TrustPidList.PidArray[i]=TrustPidVector[i];
+	}
+
+	bRet = SetTrustPid(&TrustPidList,sizeof(PROCESS_WHITE_LIST));
+
+	return bRet;
+}
 void CTestSelfProctectDlg::OnBnClickedTrustPid()
 {
 	// TODO: Add your control notification handler code here

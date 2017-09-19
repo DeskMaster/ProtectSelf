@@ -182,6 +182,7 @@
     <None Include="res\TestSelfProctect.rc2" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\inc\drvcommon.h" />
     <ClInclude Include="DriverInterface.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="stdafx.h" />

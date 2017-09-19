@@ -2,39 +2,70 @@
 #include <winioctl.h>
 #include <Winsvc.h>
 #include "DriverInterface.h"
+#include "drvcommon.h"
 
 #pragma comment(lib,"Advapi32.lib")
 
-BOOL IsVistaAndLater()
+BOOL InstallMiniFilerDriver()
 {
 	BOOL bRet = FALSE;
-	OSVERSIONINFO osvi;
-	ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
-	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-	GetVersionEx(&osvi);
-	if (osvi.dwMajorVersion >= 6)
+	BOOL bVistaAndLater = _IsVistaAndLater();
+	TCHAR SystemDir[MAX_PATH]={0};
+	::GetSystemDirectory(SystemDir,MAX_PATH);
+	CString strDesDriverPath=SystemDir;
+	strDesDriverPath +=_T("\\drivers\\SelfProtect.sys");
+
+	CString strBinaryName = strDesDriverPath;
+	CString strDriverName;
+
+#ifdef _AMD64_
+	strDriverName = _T("\\SelfProtect_x64.sys");
+#else
+	if (bVistaAndLater)
 	{
-		bRet = TRUE;
+		strDriverName = _T("\\SelfProtect_x86.sys");
+	}
+	else
+	{
+		strDriverName = _T("\\SelfProtect_xp_x86.sys");
+	}
+
+#endif
+
+	CString strSrcDriverPath = _GetDllPath();
+	strSrcDriverPath += strDriverName;
+	OutputDebugString(strSrcDriverPath);
+	OutputDebugString(_T("\n"));
+	OutputDebugString(strDesDriverPath);
+	bRet = ::CopyFile(strSrcDriverPath.GetBuffer(),strDesDriverPath.GetBuffer(),FALSE);
+	if (!bRet)
+	{
+		CString strdbg;
+		strdbg.Format(_T("InstallVsecDriver: driver copy falid,ErrorCode=%d\n"),GetLastError());
+		OutputDebugString(strdbg);
+	}
+
+	bRet = _InstallMiniFilterDriver(strBinaryName.GetBuffer());
+	if (bRet)
+	{
+		OutputDebugString(_T("InstallVsecDriver: install vsec driver sucess!!\n"));
+	}
+	else
+	{
+		OutputDebugString(_T("InstallVsecDriver: install vsec driver faild!!!!!\n"));
 	}
 
 	return bRet;
 }
 
-CString GetDllPath()
+BOOL UnInstallMiniFilerDriver()
 {
-	TCHAR	szBuff[MAX_PATH] = {0};  
-	HMODULE hModuleInstance = _AtlBaseModule.GetModuleInstance();  
-	GetModuleFileName(hModuleInstance,szBuff, MAX_PATH);  
-	CString strTmp = szBuff;
-	CString strDllPath;
-	strDllPath = strTmp.Mid(0, strTmp.ReverseFind('\\'));
-
-	return strDllPath;
+	return _UnInstallService(CloudSelfpDriverServiceName);
 }
 
 BOOL EnablePidProctect()
 {
-	BOOL bRet = SetOnOFF(IOCTL_SET_PROCESS_PROTECT_ONOFF,TRUE);
+	BOOL bRet = _SetOnOFF(IOCTL_SET_PROCESS_PROTECT_ONOFF,TRUE);
 	if(!bRet)
 		OutputDebugString(_T("EnablePidProctect: Enable process protect faild\n"));
 
@@ -42,7 +73,7 @@ BOOL EnablePidProctect()
 }
 BOOL DisablePidProctect()
 {
-	BOOL bRet = SetOnOFF(IOCTL_SET_PROCESS_PROTECT_ONOFF,FALSE);
+	BOOL bRet = _SetOnOFF(IOCTL_SET_PROCESS_PROTECT_ONOFF,FALSE);
 	if(!bRet)
 		OutputDebugString(_T("EnablePidProctect: Disable process protect faild\n"));
 
@@ -51,7 +82,7 @@ BOOL DisablePidProctect()
 
 BOOL EnableFileProctect()
 {
-	BOOL bRet = SetOnOFF(IOCTL_SET_FILE_PROTECT_ONOFF,TRUE);
+	BOOL bRet = _SetOnOFF(IOCTL_SET_FILE_PROTECT_ONOFF,TRUE);
 	if(!bRet)
 		OutputDebugString(_T("EnableFileProctect: Enable file protect faild\n"));
 
@@ -59,7 +90,7 @@ BOOL EnableFileProctect()
 }
 BOOL DisableFileProctect()
 {
-	BOOL bRet = SetOnOFF(IOCTL_SET_FILE_PROTECT_ONOFF,FALSE);
+	BOOL bRet = _SetOnOFF(IOCTL_SET_FILE_PROTECT_ONOFF,FALSE);
 	if(!bRet)
 		OutputDebugString(_T("EnableFileProctect: Disable file protect faild\n"));
 
@@ -68,7 +99,7 @@ BOOL DisableFileProctect()
 
 BOOL EnableRegProctect()
 {
-	BOOL bRet = SetOnOFF(IOCTL_SET_REG_PROTECT_ONOFF,TRUE);
+	BOOL bRet = _SetOnOFF(IOCTL_SET_REG_PROTECT_ONOFF,TRUE);
 	if(!bRet)
 		OutputDebugString(_T("EnableFileProctect: Enable Reg protect faild\n"));
 
@@ -76,80 +107,38 @@ BOOL EnableRegProctect()
 }
 BOOL DisableRegProctect()
 {
-	BOOL bRet = SetOnOFF(IOCTL_SET_REG_PROTECT_ONOFF,FALSE);
+	BOOL bRet = _SetOnOFF(IOCTL_SET_REG_PROTECT_ONOFF,FALSE);
 	if(!bRet)
 		OutputDebugString(_T("EnableFileProctect: Enable Reg protect faild\n"));
 
 	return bRet;
 }
 
-BOOL SetProctFilePath(Path_Node_Vector& FilePathVector)
+//
+BOOL SetProctFilePath(PVOID Buffer,DWORD dwBufferLength)
 {
-	BOOL bRet = FALSE;
-	size_t Counts = FilePathVector.size();
-	if (Counts==0)
-	{
-		return bRet;
-	}
-
-	PATH_LIST FilePathList;
-	memset(&FilePathList,0,sizeof(PATH_LIST));
-	FilePathList.PathNum = Counts;
-	for (int i=0;i<Counts;i++)
-	{
-		memcpy(&FilePathList.PathArray[i],&FilePathVector[i],sizeof(PROTECT_PATH_NODE));
-	}
-
-	bRet = SendDataToDriver(IOCTL_SET_PROTECT_FILE_PATH,&FilePathList,sizeof(PATH_LIST));
+	BOOL bRet = _SendDataToDriver(IOCTL_SET_PROTECT_FILE_PATH,Buffer,dwBufferLength);
 
 	return bRet;
 }
 
-BOOL SetProctRegPath(Path_Node_Vector& RegPathVector)
+BOOL SetProctRegPath(PVOID Buffer,DWORD dwBufferLength)
 {
-	BOOL bRet = FALSE;
-	size_t Counts = RegPathVector.size();
-	if (Counts==0)
-	{
-		return bRet;
-	}
-
-	PATH_LIST RegPathList;
-	memset(&RegPathList,0,sizeof(PATH_LIST));
-	RegPathList.PathNum = Counts;
-	for (int i=0;i<Counts;i++)
-	{
-		memcpy(&RegPathList.PathArray[i],&RegPathVector[i],sizeof(PROTECT_PATH_NODE));
-	}
-
-	bRet = SendDataToDriver(IOCTL_SET_PROTECT_REG_PATH,&RegPathList,sizeof(PATH_LIST));
+	BOOL bRet = _SendDataToDriver(IOCTL_SET_PROTECT_REG_PATH,Buffer,dwBufferLength);
 
 	return bRet;
 }
 
-BOOL SetTrustPid(Trust_Pid_Vector& TrustPidVector)
+BOOL SetTrustPid(PVOID Buffer,DWORD dwBufferLength)
 {
 	BOOL bRet = FALSE;
-	size_t Counts = TrustPidVector.size();
-	if (Counts==0)
-	{
-		return bRet;
-	}
 
-	PROCESS_WHITE_LIST TrustPidList;
-	memset(&TrustPidList,0,sizeof(PROCESS_WHITE_LIST));
-	TrustPidList.WhiteProcessNum = Counts;
-	for (int i=0;i<Counts;i++)
-	{
-		TrustPidList.PidArray[i]=TrustPidVector[i];
-	}
-
-	bRet = SendDataToDriver(IOCTL_SET_TRUST_PID,&TrustPidList,sizeof(PROCESS_WHITE_LIST));
+	bRet = _SendDataToDriver(IOCTL_SET_TRUST_PID,Buffer,dwBufferLength);
 
 	return bRet;
 }
 
-HANDLE OpenDevice()
+HANDLE _OpenDevice()
 {
 	HANDLE hFile = CreateFile(WIN32_STRING,
 		GENERIC_READ,
@@ -170,10 +159,10 @@ HANDLE OpenDevice()
 	return hFile;
 }
 
-BOOL SetOnOFF(DWORD dwCtrlCode,BOOL bEnable)
+BOOL _SetOnOFF(DWORD dwCtrlCode,BOOL bEnable)
 {
 	BOOL bRet = FALSE;
-	HANDLE hFile = OpenDevice();
+	HANDLE hFile = _OpenDevice();
 	if (hFile == INVALID_HANDLE_VALUE)
 	{
 		return bRet;
@@ -195,10 +184,10 @@ BOOL SetOnOFF(DWORD dwCtrlCode,BOOL bEnable)
 	return bRet;
 }
 
-BOOL SendDataToDriver(DWORD dwCtrlCode,PVOID InPutBuffer,DWORD dwInPutBufferLeng)
+BOOL _SendDataToDriver(DWORD dwCtrlCode,PVOID InPutBuffer,DWORD dwInPutBufferLeng)
 {
 	BOOL bRet = FALSE;
-	HANDLE hFile = OpenDevice();
+	HANDLE hFile = _OpenDevice();
 	if (hFile == INVALID_HANDLE_VALUE)
 	{
 		return bRet;
@@ -219,9 +208,9 @@ BOOL SendDataToDriver(DWORD dwCtrlCode,PVOID InPutBuffer,DWORD dwInPutBufferLeng
 	return bRet;
 }
 
-BOOL InstallMiniFilterDriver(LPCWSTR lpBinaryName)
+BOOL _InstallMiniFilterDriver(LPCWSTR lpBinaryName)
 {
-	BOOL bRet = InstallService(CloudSelfpDriverServiceName,
+	BOOL bRet = _InstallService(CloudSelfpDriverServiceName,
 		SERVICE_FILE_SYSTEM_DRIVER,
 		SERVICE_SYSTEM_START,
 		lpBinaryName,
@@ -270,21 +259,21 @@ BOOL InstallMiniFilterDriver(LPCWSTR lpBinaryName)
 
 			if (lResult == ERROR_SUCCESS)
 			{
-				bRet = StartFsFilterService(CloudSelfpDriverServiceName);
+				bRet = _StartFsFilterService(CloudSelfpDriverServiceName);
 			}
 		}
 	}
 	else
 	{
 		CString strdbg;
-		strdbg.Format(_T("InstallMiniFilterDriver: InstallService faild,errorcode=%d,(%s)\n",GetLastError(),lpBinaryName));
+		strdbg.Format(_T("InstallMiniFilterDriver: InstallService faild,errorcode=%d,(%s)\n"),GetLastError(),lpBinaryName);
 		OutputDebugString(strdbg);
 	}
 
 	return bRet;
 }
 
-BOOL InstallService(__in LPCWSTR lpServiceName,
+BOOL _InstallService(__in LPCWSTR lpServiceName,
 	__in DWORD dwServiceType,
 	__in DWORD dwStartType,
 	__in LPCWSTR lpBinaryPathName,
@@ -306,7 +295,7 @@ BOOL InstallService(__in LPCWSTR lpServiceName,
 	if (NULL == schSCManager)
 	{
 		CString strdbg;
-		strdbg.Format(_T("InstallService: OpenSCManagerW faild,ErrorCode=%d\n",::GetLastError()));
+		strdbg.Format(_T("InstallService: OpenSCManagerW faild,ErrorCode=%d\n"),::GetLastError());
 		OutputDebugString(strdbg);
 		return bRet;
 	}
@@ -349,7 +338,7 @@ BOOL InstallService(__in LPCWSTR lpServiceName,
 	return bRet;
 }
 
-BOOL StartFsFilterService(IN LPCTSTR lpServiceName)
+BOOL _StartFsFilterService(IN LPCTSTR lpServiceName)
 {
 	BOOL		bRet = FALSE;
 	SC_HANDLE   schSCManager = NULL;
@@ -399,13 +388,13 @@ BOOL StartFsFilterService(IN LPCTSTR lpServiceName)
 	return bRet;
 }
 
-BOOL UnInstallService(IN LPCTSTR lpServiceName)
+BOOL _UnInstallService(IN LPCTSTR lpServiceName)
 {
 	BOOL		bRet = FALSE;
 	SC_HANDLE   schSCManager = NULL;
 	SC_HANDLE   schService = NULL;
-	wchar_t     dbgMess[512]={0};
 	DWORD		dwErrorCode = 0;
+	CString strdbgMess;
 
 	OutputDebugString(_T("UnInstallService:  begin.................................\n"));
 	schSCManager = OpenSCManager(NULL,NULL,SC_MANAGER_ALL_ACCESS);
@@ -426,24 +415,24 @@ BOOL UnInstallService(IN LPCTSTR lpServiceName)
 	SERVICE_STATUS_PROCESS ssp;
 	if (bRet=ControlService(schService,SERVICE_CONTROL_STOP,(LPSERVICE_STATUS) &ssp))
 	{
-		swprintf(dbgMess,L"UnInstallService: ControlService sucess,ServiceName=%s\n", lpServiceName);
-		OutputDebugString( dbgMess);
+		strdbgMess.Format(_T("UnInstallService: ControlService sucess,ServiceName=%s\n"), lpServiceName);
+		OutputDebugString(strdbgMess);
 	}
 	else
 	{
-		swprintf(dbgMess,L"UnInstallService: ControlService err:%d,ServiceName=%s\n", GetLastError(),lpServiceName);
-		OutputDebugString( dbgMess);
+		strdbgMess.Format(_T("UnInstallService: ControlService err:%d,ServiceName=%s\n"), GetLastError(),lpServiceName);
+		OutputDebugString( strdbgMess);
 	}
 
 	if(bRet = DeleteService(schService))
 	{
-		swprintf(dbgMess,L"UnInstallService: delete service success,ServiceName=%s\n",lpServiceName);
-		OutputDebugString(dbgMess);
+		strdbgMess.Format(_T("UnInstallService: delete service success,ServiceName=%s\n"),lpServiceName);
+		OutputDebugString(strdbgMess);
 	}
 	else
 	{
-		swprintf(dbgMess, L"UnInstallService: DeleteService err:%d,ServiceName=%s\n", GetLastError(),lpServiceName);
-		OutputDebugString( dbgMess);
+		strdbgMess.Format(_T("UnInstallService: DeleteService err:%d,ServiceName=%s\n"), GetLastError(),lpServiceName);
+		OutputDebugString( strdbgMess);
 	}
 
 	if (schService)
@@ -459,59 +448,29 @@ BOOL UnInstallService(IN LPCTSTR lpServiceName)
 	return bRet;
 }
 
-BOOL InstallMiniFilerDriver()
+BOOL _IsVistaAndLater()
 {
 	BOOL bRet = FALSE;
-	BOOL bVistaAndLater = IsVistaAndLater();
-	TCHAR SystemDir[MAX_PATH]={0};
-	::GetSystemDirectory(SystemDir,MAX_PATH);
-	CString strDesDriverPath=SystemDir;
-	strDesDriverPath +=_T("\\drivers\\SelfProtect.sys");
-
-	CString strBinaryName = strDesDriverPath;
-	CString strDriverName;
-
-#ifdef _AMD64_
-	strDriverName = _T("\\SelfProtect_x64.sys");
-#else
-	if (bVistaAndLater)
+	OSVERSIONINFO osvi;
+	ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
+	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+	GetVersionEx(&osvi);
+	if (osvi.dwMajorVersion >= 6)
 	{
-		strDriverName = _T("\\SelfProtect_x86.sys");
-	}
-	else
-	{
-		strDriverName = _T("\\SelfProtect_xp_x86.sys");
-	}
-
-#endif
-
-	CString strSrcDriverPath = GetDllPath();
-	strSrcDriverPath += strDriverName;
-	OutputDebugString(strSrcDriverPath);
-	OutputDebugString(_T("\n"));
-	OutputDebugString(strDesDriverPath);
-	bRet = ::CopyFile(strSrcDriverPath.GetBuffer(),strDesDriverPath.GetBuffer(),FALSE);
-	if (!bRet)
-	{
-		CString strdbg;
-		strdbg.Format(_T("InstallVsecDriver: driver copy falid,ErrorCode=%d\n",GetLastError()));
-		OutputDebugString(strdbg);
-	}
-
-	bRet = InstallMiniFilterDriver(strBinaryName.GetBuffer());
-	if (bRet)
-	{
-		OutputDebugString(_T("InstallVsecDriver: install vsec driver sucess!!\n"));
-	}
-	else
-	{
-		OutputDebugString(_T("InstallVsecDriver: install vsec driver faild!!!!!\n"));
+		bRet = TRUE;
 	}
 
 	return bRet;
 }
 
-BOOL UnInstallMiniFilerDriver()
+CString _GetDllPath()
 {
-	return UnInstallService(CloudSelfpDriverServiceName);
+	TCHAR	szBuff[MAX_PATH] = {0};  
+	HMODULE hModuleInstance = _AtlBaseModule.GetModuleInstance();  
+	GetModuleFileName(hModuleInstance,szBuff, MAX_PATH);  
+	CString strTmp = szBuff;
+	CString strDllPath;
+	strDllPath = strTmp.Mid(0, strTmp.ReverseFind('\\'));
+
+	return strDllPath;
 }
