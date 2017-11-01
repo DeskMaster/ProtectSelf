@@ -138,7 +138,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <None Include="..\..\filter\makefile" />
-    <None Include="..\..\filter\sources" />
+    <None Include="..\..\filter\sources">
+      <FileType>Document</FileType>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\filter\minispy.c" />
@@ -150,6 +152,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\filter\mspyKern.h" />
+    <ClInclude Include="..\..\filter\resource.h" />
     <ClInclude Include="..\..\inc\minispy.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

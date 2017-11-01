@@ -42,5 +42,8 @@
     <ClInclude Include="..\..\filter_xp\mspyKern.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\filter_xp\resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

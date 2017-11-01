@@ -22,6 +22,7 @@ Environment:
 #include <fltKernel.h>
 //#include <dontuse.h>
 #include <suppress.h>
+#include <ntimage.h>
 #include "minispy.h"
 
 #pragma prefast(disable:__WARNING_ENCODE_MEMBER_FUNCTION_POINTER, "Not valid for kernel mode drivers")
@@ -367,6 +368,7 @@ SpyDeleteTxfContext (
     __inout PFLT_CONTEXT  Context,
     __in FLT_CONTEXT_TYPE  ContextType
     );
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define PROCESS_TERMINATE         (0x0001)  
 #define PROCESS_CREATE_THREAD     (0x0002)  
@@ -418,7 +420,8 @@ VOID LoadImageNotify(
 UNICODE_STRING*
 AllocateAndGetFileName(
 	__in PFLT_CALLBACK_DATA Data,
-	__in NTSTATUS* pStatus);
+	__in NTSTATUS* pStatus,
+	__out ULONG* bSYS);
 
 BOOLEAN
 PreCreateProcess(PFLT_CALLBACK_DATA Data, PFLT_IO_PARAMETER_BLOCK pIopb);
@@ -443,6 +446,16 @@ CreateCDO(PDEVICE_OBJECT* DeviceObject, WCHAR* pNtDeviceName, WCHAR* pLinkName);
 
 VOID
 DeleteCDO(PDEVICE_OBJECT DeviceObject, WCHAR* pLinkName);
+
+PVOID 
+GetDriverEntryByImageBase(PVOID ImageBase);
+
+void 
+DenyLoadDriver(PVOID pDriverEntry);
+
+BOOLEAN RtlPatternMatch(WCHAR * pat, WCHAR * str);
+
+ULONG NotefyR3Handl(__in ULONG CurrentPid,__in UNICODE_STRING* strFilePath,__in ULONG dwType);
 
 __drv_dispatchType(IRP_MJ_CREATE)
 DRIVER_DISPATCH CtrlDeviceCreate;

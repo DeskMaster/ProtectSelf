@@ -15,3 +15,7 @@ EXPORTS
 	SetTrustPid					@9
 	InstallMiniFilerDriver		@10
 	UnInstallMiniFilerDriver	@11
+	OpenEnginePort				@12
+	CloseEnginePort				@13
+	Has360MsSign				@14
+	CheckMSSignature			@15

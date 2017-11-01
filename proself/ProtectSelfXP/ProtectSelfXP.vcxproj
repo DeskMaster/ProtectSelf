@@ -39,7 +39,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>E:\WinDDK\7600.16385.1\inc\api;E:\WinDDK\7600.16385.1\inc\ddk;$(IncludePath)</IncludePath>
+    <IncludePath>E:\WinDDK\7600.16385.1\inc\ddk;E:\WinDDK\7600.16385.1\inc\api;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -90,6 +90,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\filter_xp\mspyKern.h" />
+    <ClInclude Include="..\..\filter_xp\resource.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

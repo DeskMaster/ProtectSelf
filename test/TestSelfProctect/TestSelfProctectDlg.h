@@ -43,4 +43,6 @@ public:
 	afx_msg void OnBnClickedInstallDriver();
 	afx_msg void OnBnClickedUninstallDriver();
 	afx_msg void OnBnClickedRegProtectOff();
+	afx_msg void OnBnClickedButtonCallback();
+	afx_msg void OnBnClickedButtonCallbackClose();
 };

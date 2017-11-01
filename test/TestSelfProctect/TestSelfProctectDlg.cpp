@@ -11,6 +11,49 @@
 #define new DEBUG_NEW
 #endif
 
+static int __inline Lower(int c)
+{
+	if ((c >= L'A') && (c <= L'Z'))
+	{
+		return(c + (L'a' - L'A'));
+	}
+	else
+	{
+		return(c);
+	}
+}
+
+BOOLEAN RtlPatternMatch(WCHAR * pat, WCHAR * str)
+{
+	register WCHAR * s;
+	register WCHAR * p;
+	BOOLEAN star = FALSE;
+
+loopStart:
+	for (s = str, p = pat; *s; ++s, ++p) {
+		switch (*p) {
+		case L'?':
+			if (*s == L'.') goto starCheck;
+			break;
+		case L'*':
+			star = TRUE;
+			str = s, pat = p;
+			if (!*++pat) return TRUE;
+			goto loopStart;
+		default:
+			if (Lower(*s) != Lower(*p))
+				goto starCheck;
+			break;
+		} 
+	} 
+	if (*p == L'*') ++p;
+	return (!*p);
+
+starCheck:
+	if (!star) return FALSE;
+	str++;
+	goto loopStart;
+}
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -76,6 +119,8 @@ BEGIN_MESSAGE_MAP(CTestSelfProctectDlg, CDialogEx)
 	ON_BN_CLICKED(ID_INSTALL_DRIVER, &CTestSelfProctectDlg::OnBnClickedInstallDriver)
 	ON_BN_CLICKED(ID_UNINSTALL_DRIVER, &CTestSelfProctectDlg::OnBnClickedUninstallDriver)
 	ON_BN_CLICKED(SET_REG_PROTECT_OFF, &CTestSelfProctectDlg::OnBnClickedRegProtectOff)
+	ON_BN_CLICKED(IDC_BUTTON_CALLBACK, &CTestSelfProctectDlg::OnBnClickedButtonCallback)
+	ON_BN_CLICKED(IDC_BUTTON_CALLBACK_CLOSE, &CTestSelfProctectDlg::OnBnClickedButtonCallbackClose)
 END_MESSAGE_MAP()
 
 
@@ -112,6 +157,10 @@ BOOL CTestSelfProctectDlg::OnInitDialog()
 
 	// TODO: 在此添加额外的初始化代码
 
+	WCHAR TestStr1[]=_T("\\Device\\HarddiskVolume1\\test\\PCHunter32.sys");
+	WCHAR TestStr2[]=_T("\\Device\\HarddiskVolume1\\test\\cfsfolwykxehlhl.sys");
+	BOOL bRet = RtlPatternMatch(_T("*.sys"),TestStr1);
+	bRet = RtlPatternMatch(_T("*.sys"),TestStr2);
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
@@ -242,6 +291,8 @@ BOOL SetTrustPid(Trust_Pid_Vector& TrustPidVector)
 }
 void CTestSelfProctectDlg::OnBnClickedTrustPid()
 {
+	//int uID = AfxMessageBox(_T("pid,file"),MB_YESNO|MB_ICONEXCLAMATION);
+	//IDYES IDNO
 	// TODO: Add your control notification handler code here
 	CString strPid_1;
 	CString strPid_2;
@@ -472,4 +523,48 @@ void CTestSelfProctectDlg::OnBnClickedUninstallDriver()
 	}
 }
 
+void CTestSelfProctectDlg::OnBnClickedButtonCallback()
+{
+	TCHAR strCertName[256];
+	WCHAR Temp1[] = L"?";
+	WCHAR Temp2[] = L"S";
+	WCHAR str[512] = L"\\SystemRoot\\System32\\Drivers\\IsDrv122.sys";
+	if (str[1]==Temp2[1])
+	{
+		OutputDebugString(str);
+	}
 
+	CString strDir = _T("C:\\Users\\Administrator\\Desktop\\IceSword122en\\");
+	CString strName = strDir+_T("cdrom.sys");
+	CheckMSSignature(strName);
+	GetCertNameOfMsSign(strName,strCertName,512);
+
+	strName = strDir + _T("AntiRkX64.sys");
+	CheckMSSignature(strName);
+	GetCertNameOfMsSign(strName,strCertName,512);
+	// TODO: Add your control notification handler code here
+	BOOL bRet = OpenEnginePort();
+	if (bRet)
+	{
+		AfxMessageBox(_T("call back set sucess"));
+	}
+	else
+	{
+		AfxMessageBox(_T("call back set faild"));
+	}
+}
+
+
+void CTestSelfProctectDlg::OnBnClickedButtonCallbackClose()
+{
+	// TODO: Add your control notification handler code here
+	BOOL bRet = CloseEnginePort();
+	if (bRet)
+	{
+		AfxMessageBox(_T("call back close sucess"));
+	}
+	else
+	{
+		AfxMessageBox(_T("call back close faild"));
+	}
+}

@@ -21,3 +21,7 @@ BOOL _StartFsFilterService(IN LPCTSTR lpServiceName);
 BOOL _UnInstallService(IN LPCTSTR lpServiceName);
 BOOL _IsVistaAndLater();
 CString _GetDllPath();
+BOOL _SendReplyMess(ULONG ReplyResult);
+unsigned __stdcall _ReadPacketThread(void* lParam);
+BOOL _PassHandle();
+BOOL _BlockHandle();

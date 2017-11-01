@@ -67,7 +67,7 @@ typedef struct _MINISPYVER {
 //  Name of minispy's communication server port
 //
 
-#define MINISPY_PORT_NAME                   L"\\MiniSpyPort"
+#define MINISPY_PORT_NAME                   L"\\SelfProtectPort"
 
 //
 //  Local definitions for passing parameters between the filter and user mode
@@ -254,7 +254,15 @@ typedef struct _COMMAND_MESSAGE {
 #define MAX_WHITE_PROCESS_NUM	20
 #define MAX_PATH_LENGTH			512
 
+#define MAX_FILE_PATH			(512)
+#define REPLY_PASS				0x00000001
+#define REPLY_BLOCK				0x00000002
+
+#define MESSAGE_TYPE_FILE_CREATE		1
+#define MESSAGE_TPYE_SYS_LOAD			2
+
 #pragma pack(push, 1)
+
 //White Pid = Protect Pid
 typedef struct _PROCESS_WHITE_LIST
 {
@@ -276,6 +284,33 @@ typedef struct _PATH_LIST
 	ULONG PathNum;
 	PROTECT_PATH_NODE PathArray[MAX_FILE_NUM];
 }PATH_LIST;
+
+typedef struct _Send_Message
+{
+	ULONG Type;	//MESSAGE_TYPE_FILE_CREATE: 文件拦截；MESSAGE_TPYE_SYS_LOAD：驱动加载拦截.
+	ULONG Pid;
+	WCHAR FilePath[MAX_FILE_PATH];
+}Send_Message;
+
+typedef struct _Reply_Message
+{
+	ULONG Result;
+}Reply_Message;
+
+typedef struct	_FILTER_RECEIVE_MESSAGE
+{
+	FILTER_MESSAGE_HEADER MsgHeader;
+	Send_Message		  ReciveData;
+
+}FILTER_RECEIVE_MESSAGE, *PFILTER_RECEIVE_MESSAGE;
+
+typedef struct _FILTER_REPLY_MESSAGE
+{
+	FILTER_REPLY_HEADER ReplyHeader;
+	Reply_Message ReplyData;
+
+}FILTER_REPLY_MESSAGE, *PFILTER_REPLY_MESSAGE;
+
 #pragma pack(pop)
 
 #define IOCTL_SET_TRUST_PID					CTL_CODE (FILE_DEVICE_UNKNOWN, (0x800 + 0x099), METHOD_BUFFERED, FILE_ANY_ACCESS)

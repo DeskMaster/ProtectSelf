@@ -15,7 +15,6 @@ Environment:
     Kernel mode
 
 --*/
-
 #include "mspyKern.h"
 #include <stdio.h>
 
@@ -702,7 +701,7 @@ Return Value:
     return FLT_POSTOP_FINISHED_PROCESSING;
 }
 
-UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatus)
+UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatus,ULONG* bSYS)
 {
 	UNICODE_STRING* pUnicodeName = NULL;
 	PFLT_FILE_NAME_INFORMATION FileNameInformation = NULL;
@@ -731,6 +730,19 @@ UNICODE_STRING*  AllocateAndGetFileName(PFLT_CALLBACK_DATA Data,NTSTATUS* pStatu
 		status = FltParseFileNameInformation(FileNameInformation);
 		if (NT_SUCCESS(status))
 		{
+			if (FileNameInformation->Extension.Buffer&&FileNameInformation->Extension.Length)
+			{
+				KdPrint(("AllocateAndGetFileName: ext: %wZ,leng=%d,0x%x,0x%x,0x%x\n",&FileNameInformation->Extension,FileNameInformation->Extension.Length,FileNameInformation->Extension.Buffer[0],FileNameInformation->Extension.Buffer[1],FileNameInformation->Extension.Buffer[2]));
+				if (bSYS&&
+					FileNameInformation->Extension.Length==6 &&
+					FileNameInformation->Extension.Buffer[0]==0x73 &&
+					FileNameInformation->Extension.Buffer[1]==0x79 &&
+					FileNameInformation->Extension.Buffer[2]==0x73)
+				{
+					*bSYS = TRUE;
+				}
+			}
+
 			if (FileNameInformation->Name.Length )
 			{
 				USHORT NameLeng = FileNameInformation->Name.Length+sizeof(UNICODE_STRING);
@@ -1000,6 +1012,7 @@ RegistryCallback(
 	return status;
 }
 
+
 VOID LoadImageNotify(
 	__in PUNICODE_STRING FullImageName,
 	__in HANDLE ProcessId,                // pid into which image is being mapped
@@ -1010,15 +1023,21 @@ VOID LoadImageNotify(
 		if (0==ProcessId)
 		{
 			ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
-			KdPrint(("LoadImageNotify:    \n"));
 			if (IsWhitePid(CurrPid))
 			{
-				break;
+				KdPrint(("LoadImageNotify: pid=%d is white pid\n",CurrPid));
+				//break;
 			}
 				
 			if(FullImageName!=NULL && MmIsAddressValid(FullImageName))
 			{
 				KdPrint(("LoadImageNotify: Pid(%d),%wZ\n",CurrPid,FullImageName));
+				if (NotefyR3Handl(CurrPid,FullImageName,MESSAGE_TPYE_SYS_LOAD)==REPLY_BLOCK)
+				{
+					PVOID pDrvEntry=GetDriverEntryByImageBase(ImageInfo->ImageBase);
+					DenyLoadDriver(pDrvEntry);
+					KdPrint(("LoadImageNotify: forbid load driver (%wZ)\n", FullImageName));
+				}
 			}
 		}
 	}while(FALSE);
@@ -1035,6 +1054,101 @@ static int __inline Lower(int c)
 		return(c);
 	}
 }
+
+BOOLEAN RtlPatternMatch(WCHAR * pat, WCHAR * str)
+{
+	WCHAR * s;
+	WCHAR * p;
+	BOOLEAN star = FALSE;
+
+loopStart:
+	for (s = str, p = pat; *s; ++s, ++p) {
+		switch (*p) {
+		case L'?':
+			if (*s == L'.') goto starCheck;
+			break;
+		case L'*':
+			star = TRUE;
+			str = s, pat = p;
+			if (!*++pat) return TRUE;
+			goto loopStart;
+		default:
+			if (Lower(*s) != Lower(*p))
+				goto starCheck;
+			break;
+		} 
+	} 
+	if (*p == L'*') ++p;
+	return (!*p);
+
+starCheck:
+	if (!star) return FALSE;
+	str++;
+	goto loopStart;
+}
+
+BOOLEAN VxkCopyMemory( PVOID pDestination, PVOID pSourceAddress, SIZE_T SizeOfCopy )
+{
+	PMDL pMdl = NULL;
+	PVOID pSafeAddress = NULL;
+	pMdl = IoAllocateMdl( pDestination, (ULONG)SizeOfCopy, FALSE, FALSE, NULL );
+	if( !pMdl ) return FALSE;
+	__try
+	{
+		MmProbeAndLockPages( pMdl, KernelMode, IoReadAccess );
+	}
+	__except(EXCEPTION_EXECUTE_HANDLER)
+	{
+		IoFreeMdl( pMdl );
+		return FALSE;
+	}
+	pSafeAddress = MmGetSystemAddressForMdlSafe( pMdl, NormalPagePriority );
+	if( !pSafeAddress ) return FALSE;
+	RtlCopyMemory( pSafeAddress, pSourceAddress, SizeOfCopy );
+	MmUnlockPages( pMdl );
+	IoFreeMdl( pMdl );
+	return TRUE;
+}
+
+#if !defined (AMD64) && !defined (IA64)
+// 32
+PVOID GetDriverEntryByImageBase(PVOID ImageBase)
+{
+	PIMAGE_DOS_HEADER pDOSHeader;
+	PIMAGE_NT_HEADERS32 pNTHeader;
+	PVOID pEntryPoint;
+	pDOSHeader = (PIMAGE_DOS_HEADER)ImageBase;
+	pNTHeader = (PIMAGE_NT_HEADERS32)((ULONG)ImageBase + pDOSHeader->e_lfanew);
+	pEntryPoint = (PVOID)((ULONG)ImageBase + pNTHeader->OptionalHeader.AddressOfEntryPoint);
+	return pEntryPoint;
+}
+
+void DenyLoadDriver(PVOID pDriverEntry)
+{
+	UCHAR fuck[]="\xB8\x22\x00\x00\xC0\xC2\x08\x00";
+	VxkCopyMemory(pDriverEntry,fuck,sizeof(fuck));
+}
+
+#else
+//64
+PVOID GetDriverEntryByImageBase(PVOID ImageBase)
+{
+	PIMAGE_DOS_HEADER pDOSHeader;
+	PIMAGE_NT_HEADERS64 pNTHeader;
+	PVOID pEntryPoint;
+	pDOSHeader = (PIMAGE_DOS_HEADER)ImageBase;
+	pNTHeader = (PIMAGE_NT_HEADERS64)((ULONG64)ImageBase + pDOSHeader->e_lfanew);
+	pEntryPoint = (PVOID)((ULONG64)ImageBase + pNTHeader->OptionalHeader.AddressOfEntryPoint);
+	return pEntryPoint;
+}
+
+void DenyLoadDriver(PVOID pDriverEntry)
+{
+	UCHAR fuck[]="\xB8\x22\x00\x00\xC0\xC3";
+	VxkCopyMemory(pDriverEntry,fuck,sizeof(fuck));
+}
+
+#endif
 
 BOOLEAN RtlStringMatch(WCHAR * pat, WCHAR * str, ULONG Leng)
 {
@@ -1116,7 +1230,7 @@ BOOLEAN PreCreateProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb)
 	ULONG ModifyDesireAccess = DELETE|FILE_WRITE_DATA|FILE_WRITE_ATTRIBUTES|FILE_WRITE_EA|FILE_APPEND_DATA;
 	PUNICODE_STRING pUnicodeName = NULL;
 	ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
-
+	ULONG bSYS =0;
 	do 
 	{
 		if (IsWhitePid(CurrPid))
@@ -1132,15 +1246,41 @@ BOOLEAN PreCreateProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb)
 			(DispositionOptions&FILE_CREATE) ||
 			(CreateOptions&FILE_DELETE_ON_CLOSE))
 		{
-			pUnicodeName = AllocateAndGetFileName(Data,&status);
+			pUnicodeName = AllocateAndGetFileName(Data,&status,&bSYS);
 			if (NULL == pUnicodeName)
 			{
+				KdPrint(("PreCreateProcess: NULL == pUnicodeName\n"));
 				break;
+			}
+			else
+			{
+				KdPrint(("PreCreateProcess: %wZ\n",pUnicodeName));
 			}
 
 			if(bRet= IsProtectFile(pUnicodeName->Buffer,pUnicodeName->Length))
 			{
+				KdPrint(("PreCreateProcess: IsProtectFile break.\n"));
 				break;
+			}
+
+			if (bSYS)
+			{
+				KdPrint(("PreCreateProcess: match sys %wZ,(pid=%d)\n",pUnicodeName,CurrPid));
+				if(NotefyR3Handl(CurrPid,pUnicodeName,MESSAGE_TYPE_FILE_CREATE)==REPLY_BLOCK)
+				{
+					KdPrint(("PreCreateProcess: forbid %wZ,(pid=%d)\n",pUnicodeName,CurrPid));
+					bRet=TRUE;
+				}
+				else
+				{
+					KdPrint(("PreCreateProcess: allow %wZ,(pid=%d)\n",pUnicodeName,CurrPid));
+				}
+
+				break;
+			}
+			else
+			{
+				KdPrint(("PreCreateProcess: not match sys %wZ\n",pUnicodeName));
 			}
 		}
 	} while (FALSE);
@@ -1163,6 +1303,7 @@ BOOLEAN PreSetInforProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb
 	{
 		NTSTATUS status;
 		PUNICODE_STRING pUnicodeName = NULL;
+		ULONG bSYS = FALSE;
 		ULONG CurrPid = HandleToUlong(PsGetCurrentProcessId());
 
 		do
@@ -1172,7 +1313,7 @@ BOOLEAN PreSetInforProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb
 				break;
 			}
 
-			pUnicodeName = AllocateAndGetFileName(Data, &status);
+			pUnicodeName = AllocateAndGetFileName(Data, &status,&bSYS);
 			if (NULL == pUnicodeName)
 			{
 				break;
@@ -1182,6 +1323,12 @@ BOOLEAN PreSetInforProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb
 			{
 				break;
 			}
+
+			//if (bSYS)
+			//{
+			//	KdPrint(("PreSetInforProcess: forbid delete match sys %wZ\n",pUnicodeName));
+			//	break;
+			//}
 
 			if (FileInforClass== FileRenameInformation)
 			{
@@ -1195,6 +1342,12 @@ BOOLEAN PreSetInforProcess(PFLT_CALLBACK_DATA Data,PFLT_IO_PARAMETER_BLOCK pIopb
 					{
 						break;
 					}
+
+					//if (bRet = RtlPatternMatch(L"*.sys",pUnicodeName->Buffer))
+					//{
+					//	KdPrint(("PreSetInforProcess: forbid rename match sys %wZ\n",pUnicodeName));
+					//	break;
+					//}
 				}
 			}
 
@@ -1438,6 +1591,54 @@ CtrlDeviceControl (
 
 	DbgPrintEx (DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL, "CtrlDeviceControl leaving - status 0x%x\n", Status);
 	return Status;
+}
+
+ULONG NotefyR3Handl(__in ULONG CurrentPid,__in UNICODE_STRING* strFilePath,__in ULONG dwType)
+{
+	ULONG dwRet = 0;
+
+	if (MiniSpyData.ClientPort &&
+		strFilePath->Length&&
+		strFilePath->Length<MAX_FILE_PATH*2)
+	{
+		NTSTATUS status = STATUS_SUCCESS;
+		Send_Message SendBuffer;
+		Reply_Message ReplyMsg;
+		ULONG uReplyLeng = 0;
+		LARGE_INTEGER TimeOut;
+
+		uReplyLeng = sizeof(Reply_Message);
+		ReplyMsg.Result = 0;
+		RtlZeroMemory(&SendBuffer,sizeof(Send_Message));
+		
+		TimeOut.QuadPart =-10 * 1000 * 1000;
+		TimeOut.QuadPart *=30;
+
+		RtlCopyMemory(SendBuffer.FilePath,strFilePath->Buffer,strFilePath->Length);
+		SendBuffer.Pid = CurrentPid;
+		SendBuffer.Type = dwType;
+
+		status = FltSendMessage(MiniSpyData.Filter,
+			&MiniSpyData.ClientPort,
+			&SendBuffer,
+			sizeof(Send_Message),
+			&ReplyMsg,
+			&uReplyLeng,
+			&TimeOut);
+
+		if (NT_SUCCESS(status))
+		{
+			dwRet = ReplyMsg.Result;
+		}
+		else
+		{
+			dwRet = ReplyMsg.Result;
+		}
+
+		KdPrint(("NotefyR3Handl: REPLY result=%d,status=0x%x\n",ReplyMsg.Result,status));
+	}
+
+	return dwRet;
 }
 
 //void InitObjectAttributes(POBJECT_ATTRIBUTES ObjAttr, PUNICODE_STRING UniStr, LPWSTR Name)
